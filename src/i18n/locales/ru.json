@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "home": "Главная",
+    "markets": "Рынки",
+    "signals": "Сигналы",
+    "profile": "Профиль"
+  },
+  "home": {
+    "balance": "Мой баланс",
+    "portfolio": "Портфель →",
+    "today": "Сегодня на рынке",
+    "recommendations": "Рекомендации сегодня",
+    "refreshMarket": "🔄 Обновить рынок",
+    "refreshing": "Обновляем данные...",
+    "updated": "Обновлено"
+  },
+  "signal": {
+    "buy": "ПОКУПАЙ",
+    "sell": "ПРОДАВАЙ",
+    "hold": "ДЕРЖИ",
+    "buyUrgent": "ПОКУПАЙ СРОЧНО",
+    "sellUrgent": "ПРОДАВАЙ СРОЧНО",
+    "target": "Цель",
+    "stopLoss": "Стоп",
+    "potential": "Потенциал",
+    "timeframe": "Период",
+    "reason": "Обоснование",
+    "iSawSignal": "✅ Я увидел сигнал",
+    "contactOperator": "📞 СРОЧНО СВЯЗАТЬСЯ С ОПЕРАТОРОМ",
+    "informedOperator": "✅ Я проинформировал оператора",
+    "writeOperatorNow": "✉️ Написать оператору сейчас",
+    "new": "Новый",
+    "seen": "Просмотрен",
+    "informed": "Информирован"
+  },
+  "urgent": {
+    "title": "СРОЧНЫЙ СИГНАЛ!",
+    "subtitle": "Действуйте немедленно",
+    "timer": "Действуйте в течение",
+    "minutes": "минут",
+    "writeNow": "✉️ Написать оператору сейчас",
+    "understood": "Понял, спасибо"
+  },
+  "markets": {
+    "title": "Рынки",
+    "search": "Поиск инструмента...",
+    "all": "Все",
+    "crypto": "Крипто",
+    "stocks": "Акции",
+    "forex": "Валюты",
+    "commodities": "Товары",
+    "volume": "Объём",
+    "getSignal": "Получить сигнал"
+  },
+  "detail": {
+    "price": "Цена",
+    "change24h": "Изменение 24ч",
+    "volume": "Объём 24ч",
+    "marketCap": "Кап.",
+    "getSignal": "🎯 ПОЛУЧИТЬ СИГНАЛ",
+    "notifyOperator": "📱 Сообщить оператору об интересе",
+    "history": "История сигналов",
+    "chart": {
+      "1h": "1Ч",
+      "4h": "4Ч",
+      "1d": "1Д",
+      "1w": "1Н"
+    }
+  },
+  "profile": {
+    "title": "Профиль",
+    "level": "Инвестор",
+    "writeOperator": "✉️ Написать оператору",
+    "myPortfolio": "💼 Мой портфель",
+    "settings": "⚙️ Настройки",
+    "exit": "🚪 Выйти",
+    "totalSignals": "Сигналов получено",
+    "successRate": "Успешность",
+    "since": "С нами с"
+  },
+  "portfolio": {
+    "title": "Мой портфель",
+    "total": "Общий баланс",
+    "pnl": "P&L за день",
+    "assets": "Мои активы"
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "markAllRead": "Прочитать всё",
+    "empty": "Нет уведомлений",
+    "now": "Только что",
+    "minutesAgo": "мин. назад",
+    "hoursAgo": "ч. назад"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "close": "Закрыть",
+    "back": "Назад",
+    "signalBy": "Сигнал по",
+    "noResults": "Ничего не найдено"
+  }
+}

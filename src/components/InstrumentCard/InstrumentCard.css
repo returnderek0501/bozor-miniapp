@@ -1,0 +1,136 @@
+.instrument-card {
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s ease, opacity 0.15s;
+}
+
+.instrument-card:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+/* Carousel variant */
+.instrument-card--carousel {
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 110px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  flex-shrink: 0;
+}
+
+.instrument-card--carousel .instrument-card__emoji {
+  font-size: 26px;
+  width: 48px;
+  height: 48px;
+  background: #f5f5f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.instrument-card--carousel .instrument-card__symbol {
+  font-size: 14px;
+  font-weight: 700;
+  color: #212121;
+}
+
+.instrument-card--carousel .instrument-card__price-mini {
+  font-size: 12px;
+  color: #757575;
+  font-weight: 500;
+}
+
+.instrument-card--carousel .instrument-card__change {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.instrument-card__mini-bar {
+  height: 3px;
+  width: 60px;
+  border-radius: 2px;
+}
+
+.instrument-card__mini-bar.positive { background: linear-gradient(90deg, #e8f5e9, #00C853); }
+.instrument-card__mini-bar.negative { background: linear-gradient(90deg, #ffebee, #FF3D00); }
+
+/* List variant */
+.instrument-card--list {
+  width: 100%;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+  margin-bottom: 8px;
+}
+
+.instrument-card__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.instrument-card__icon-wrap {
+  width: 44px;
+  height: 44px;
+  background: #f5f5f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.instrument-card--list .instrument-card__emoji {
+  font-size: 22px;
+  font-style: normal;
+}
+
+.instrument-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.instrument-card--list .instrument-card__symbol {
+  font-size: 15px;
+  font-weight: 700;
+  color: #212121;
+}
+
+.instrument-card__name {
+  font-size: 12px;
+  color: #9e9e9e;
+}
+
+.instrument-card__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.instrument-card__price {
+  font-size: 15px;
+  font-weight: 700;
+  color: #212121;
+}
+
+.instrument-card__change {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.positive { color: #00C853; }
+.negative { color: #FF3D00; }

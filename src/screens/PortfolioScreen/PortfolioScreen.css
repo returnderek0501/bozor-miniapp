@@ -1,0 +1,144 @@
+.portfolio-screen {
+  min-height: 100dvh;
+  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+}
+
+.portfolio-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.portfolio-total-card {
+  background: linear-gradient(135deg, #00C853, #00E676);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 28px rgba(0, 200, 83, 0.35);
+}
+
+.portfolio-total__label {
+  font-size: 14px;
+  color: rgba(255,255,255,0.85);
+}
+
+.portfolio-total__amount {
+  font-size: 36px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.portfolio-total__pnl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.portfolio-total__pnl .positive,
+.portfolio-total__pnl .negative {
+  font-weight: 700;
+  color: #fff;
+}
+
+.portfolio-pnl-pct {
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.portfolio-pnl-pct.positive,
+.portfolio-pnl-pct.negative { color: #fff; }
+
+.portfolio-pnl-period {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+}
+
+.portfolio-section-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #212121;
+  margin: 0 0 12px;
+}
+
+.portfolio-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.portfolio-asset {
+  width: 100%;
+  background: #fff;
+  border: none;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s, background 0.12s;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+}
+
+.portfolio-asset:active {
+  transform: scale(0.97);
+  background: #f9f9f9;
+}
+
+.portfolio-asset__icon {
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  background: #f5f5f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+.portfolio-asset__info {
+  flex: 1;
+  text-align: left;
+}
+
+.portfolio-asset__symbol {
+  font-size: 16px;
+  font-weight: 700;
+  color: #212121;
+}
+
+.portfolio-asset__amount {
+  font-size: 12px;
+  color: #9e9e9e;
+}
+
+.portfolio-asset__right {
+  text-align: right;
+}
+
+.portfolio-asset__value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #212121;
+}
+
+.portfolio-asset__pnl {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.positive { color: #00C853; }
+.negative { color: #FF3D00; }

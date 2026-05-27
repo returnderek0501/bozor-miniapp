@@ -1,0 +1,224 @@
+.urgent-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  animation: overlay-in 0.2s ease;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.urgent-popup {
+  width: 100%;
+  background: #fff;
+  border-radius: 28px 28px 0 0;
+  padding: 28px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+  animation: popup-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popup-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.urgent-popup__bg-anim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: bg-pulse 2s infinite;
+  opacity: 0.04;
+  border-radius: 28px 28px 0 0;
+}
+
+.urgent-popup--buy .urgent-popup__bg-anim { background: #00C853; }
+.urgent-popup--sell .urgent-popup__bg-anim { background: #FF3D00; }
+
+@keyframes bg-pulse {
+  0%, 100% { opacity: 0.04; }
+  50% { opacity: 0.08; }
+}
+
+.urgent-popup__icon {
+  font-size: 56px;
+  animation: icon-bounce 1s infinite;
+}
+
+@keyframes icon-bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.urgent-popup__badge {
+  background: linear-gradient(90deg, #FF3D00, #FF6D00);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 8px 20px;
+  border-radius: 24px;
+  letter-spacing: 0.5px;
+  animation: badge-flash 1.5s infinite;
+}
+
+@keyframes badge-flash {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.03); }
+}
+
+.urgent-popup__subtitle {
+  font-size: 15px;
+  color: #757575;
+  margin-top: -4px;
+}
+
+.urgent-popup__signal-name {
+  font-size: 26px;
+  font-weight: 800;
+  color: #212121;
+}
+
+.urgent-popup__action-type {
+  font-size: 20px;
+  font-weight: 900;
+  padding: 10px 24px;
+  border-radius: 16px;
+  letter-spacing: 0.5px;
+}
+
+.urgent-popup__action-type.buy {
+  background: #e8f5e9;
+  color: #00C853;
+}
+
+.urgent-popup__action-type.sell {
+  background: #ffebee;
+  color: #FF3D00;
+}
+
+.urgent-popup__price-block {
+  width: 100%;
+  background: #f8f9fa;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.urgent-popup__price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.urgent-popup__price-label {
+  font-size: 14px;
+  color: #757575;
+}
+
+.urgent-popup__price-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: #212121;
+}
+
+.urgent-popup__price-val--green { color: #00C853; }
+.urgent-popup__price-val--red { color: #FF3D00; }
+
+.urgent-popup__divider {
+  height: 1px;
+  background: #f0f0f0;
+}
+
+.urgent-popup__timer-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  background: #fff8f5;
+  border-radius: 16px;
+  width: 100%;
+  border: 1px solid rgba(255, 61, 0, 0.15);
+}
+
+.urgent-popup__timer-label {
+  font-size: 13px;
+  color: #FF3D00;
+  font-weight: 600;
+}
+
+.urgent-popup__timer {
+  font-size: 48px;
+  font-weight: 900;
+  color: #FF3D00;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s;
+}
+
+.urgent-popup__timer--critical {
+  color: #FF3D00;
+  animation: timer-critical 0.5s infinite;
+}
+
+@keyframes timer-critical {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.urgent-popup__timer-sub {
+  font-size: 12px;
+  color: #bdbdbd;
+}
+
+.urgent-popup__actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.urgent-popup__btn {
+  width: 100%;
+  border: none;
+  border-radius: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  height: 58px;
+  transition: transform 0.15s, opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.2px;
+}
+
+.urgent-popup__btn:active {
+  transform: scale(0.96);
+  opacity: 0.88;
+}
+
+.urgent-popup__btn--primary {
+  background: linear-gradient(135deg, #00C853, #00E676);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(0, 200, 83, 0.4);
+}
+
+.urgent-popup--sell .urgent-popup__btn--primary {
+  background: linear-gradient(135deg, #FF3D00, #FF6D00);
+  box-shadow: 0 6px 20px rgba(255, 61, 0, 0.4);
+}
+
+.urgent-popup__btn--secondary {
+  background: #f5f5f5;
+  color: #757575;
+}

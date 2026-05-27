@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "home": "Asosiy",
+    "markets": "Bozorlar",
+    "signals": "Signallar",
+    "profile": "Profil"
+  },
+  "home": {
+    "balance": "Mening balansim",
+    "portfolio": "Portfolio →",
+    "today": "Bugun bozorda",
+    "recommendations": "Bugungi tavsiyalar",
+    "refreshMarket": "🔄 Bozorni yangilash",
+    "refreshing": "Ma'lumotlar yangilanmoqda...",
+    "updated": "Yangilandi"
+  },
+  "signal": {
+    "buy": "SOTIB OL",
+    "sell": "SOT",
+    "hold": "USHLA",
+    "buyUrgent": "SHOSHILINCH SOTIB OL",
+    "sellUrgent": "SHOSHILINCH SOT",
+    "target": "Maqsad",
+    "stopLoss": "Stop",
+    "potential": "Potensial",
+    "timeframe": "Davr",
+    "reason": "Asoslash",
+    "iSawSignal": "✅ Men signalni ko'rdim",
+    "contactOperator": "📞 SHOSHILINCH OPERATOR BILAN BOG'LANISH",
+    "informedOperator": "✅ Men operatorni xabardor qildim",
+    "writeOperatorNow": "✉️ Operatorga hozir yozish",
+    "new": "Yangi",
+    "seen": "Ko'rildi",
+    "informed": "Xabardor qilindi"
+  },
+  "urgent": {
+    "title": "SHOSHILINCH SIGNAL!",
+    "subtitle": "Darhol harakat qiling",
+    "timer": "Harakat qilish vaqti",
+    "minutes": "daqiqa",
+    "writeNow": "✉️ Operatorga hozir yozish",
+    "understood": "Tushundim, rahmat"
+  },
+  "markets": {
+    "title": "Bozorlar",
+    "search": "Instrument qidirish...",
+    "all": "Hammasi",
+    "crypto": "Kripto",
+    "stocks": "Aksiyalar",
+    "forex": "Valyutalar",
+    "commodities": "Tovarlar",
+    "volume": "Hajm",
+    "getSignal": "Signal olish"
+  },
+  "detail": {
+    "price": "Narx",
+    "change24h": "24s o'zgarish",
+    "volume": "24s hajm",
+    "marketCap": "Kap.",
+    "getSignal": "🎯 SIGNAL OLISH",
+    "notifyOperator": "📱 Operatorga qiziqish haqida xabar berish",
+    "history": "Signallar tarixi",
+    "chart": {
+      "1h": "1S",
+      "4h": "4S",
+      "1d": "1K",
+      "1w": "1H"
+    }
+  },
+  "profile": {
+    "title": "Profil",
+    "level": "Investor",
+    "writeOperator": "✉️ Operatorga yozish",
+    "myPortfolio": "💼 Mening portfoliom",
+    "settings": "⚙️ Sozlamalar",
+    "exit": "🚪 Chiqish",
+    "totalSignals": "Olingan signallar",
+    "successRate": "Muvaffaqiyat darajasi",
+    "since": "Biz bilan"
+  },
+  "portfolio": {
+    "title": "Mening portfoliom",
+    "total": "Umumiy balans",
+    "pnl": "Kunlik P&L",
+    "assets": "Mening aktivlarim"
+  },
+  "notifications": {
+    "title": "Bildirishnomalar",
+    "markAllRead": "Hammasini o'qilgan deb belgilash",
+    "empty": "Bildirishnomalar yo'q",
+    "now": "Hozir",
+    "minutesAgo": "daq. oldin",
+    "hoursAgo": "soat oldin"
+  },
+  "common": {
+    "loading": "Yuklanmoqda...",
+    "close": "Yopish",
+    "back": "Orqaga",
+    "signalBy": "Signal bo'yicha",
+    "noResults": "Hech narsa topilmadi"
+  }
+}
