@@ -88,6 +88,69 @@
   transition: background 0.2s;
 }
 
-.auth-gate__btn:active {
+.auth-gate__btn:active:not(:disabled) {
   background: var(--navy-light);
+}
+
+.auth-gate__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-gate__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 16px;
+}
+
+.auth-gate__phone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.auth-gate__prefix {
+  flex-shrink: 0;
+  padding: 12px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.auth-gate__input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 16px;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+}
+
+.auth-gate__input:focus {
+  outline: none;
+  border-color: var(--navy);
+}
+
+.auth-gate__error {
+  font-size: 13px;
+  color: var(--error);
+  margin-bottom: 12px;
+}
+
+.auth-gate__back {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
 }

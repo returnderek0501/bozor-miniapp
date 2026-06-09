@@ -35,32 +35,16 @@ export default function App() {
     refreshAuth();
   }, [refreshAuth]);
 
-  const handleRequestContact = useCallback(() => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg?.requestContact) {
-      setErrorMessage(t('error.contactFailed'));
+  const handleVerify = useCallback(async (phone: string) => {
+    const result = await verifyPhone(phone);
+    if (result.authorized) {
+      setState('ready');
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } else {
+      setErrorMessage(result.message || t('error.simDetail'));
       setState('denied');
-      return;
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
     }
-
-    setState('loading');
-    tg.requestContact(async (sent, event) => {
-      if (!sent || !event?.contact?.phone_number) {
-        setErrorMessage(t('error.contactFailed'));
-        setState('auth');
-        return;
-      }
-
-      const result = await verifyPhone(event.contact.phone_number);
-      if (result.authorized) {
-        setState('ready');
-        tg.HapticFeedback?.impactOccurred('light');
-      } else {
-        setErrorMessage(result.message || t('error.simDetail'));
-        setState('denied');
-        tg.HapticFeedback?.impactOccurred('medium');
-      }
-    });
   }, [t]);
 
   if (state === 'loading') {
@@ -73,7 +57,7 @@ export default function App() {
   }
 
   if (state === 'auth') {
-    return <AuthGate onRequestContact={handleRequestContact} />;
+    return <AuthGate onVerify={handleVerify} />;
   }
 
   if (state === 'denied') {

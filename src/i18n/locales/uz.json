@@ -6,8 +6,14 @@
   },
   "auth": {
     "title": "Tizimga kirish",
-    "description": "Xavfsiz kirish uchun telefon raqamingizni tasdiqlang.",
-    "button": "Telefon raqamini tasdiqlash",
+    "description": "Davom etish uchun telefon raqamingizni kiriting.",
+    "button": "Davom etish",
+    "phoneTitle": "Telefon raqami",
+    "phoneDescription": "Ro'yxatdan o'tgan telefon raqamingizni kiriting.",
+    "phoneLabel": "Raqam",
+    "phoneInvalid": "Telefon raqami noto'g'ri kiritilgan",
+    "submit": "Kirish",
+    "back": "Orqaga",
     "checking": "Tekshirilmoqda...",
     "loading": "Yuklanmoqda..."
   },
