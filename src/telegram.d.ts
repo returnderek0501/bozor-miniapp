@@ -20,6 +20,7 @@ interface TelegramWebApp {
     notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
     selectionChanged: () => void;
   };
+  initData: string;
   initDataUnsafe: {
     user?: TelegramWebAppUser;
     start_param?: string;

@@ -7,26 +7,26 @@ import { InstrumentCard } from '../../components/InstrumentCard/InstrumentCard';
 import { useSignalStore } from '../../store/signalStore';
 import { useMarketStore } from '../../store/marketStore';
 import { useAppStore } from '../../store/appStore';
+import { useUserStore } from '../../store/userStore';
 import { getFeaturedInstruments } from '../../data/instruments';
 import './HomeScreen.css';
 
 export function HomeScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { signals } = useSignalStore();
+  const { getVisibleSignals } = useSignalStore();
   const { refreshMarket, isRefreshing } = useMarketStore();
   const { setLoading } = useAppStore();
+  const { profile } = useUserStore();
   const [isPulling, setIsPulling] = useState(false);
   const [pullY, setPullY] = useState(0);
   const [touchStartY, setTouchStartY] = useState(0);
   const [showInAppNotif, setShowInAppNotif] = useState(false);
 
+  const signals = getVisibleSignals();
   const featured = getFeaturedInstruments();
   const recommendations = signals.slice(0, 5);
-  const balanceChange = 3.24;
-  const balance = 24850;
 
-  // In-app notification on mount
   useEffect(() => {
     const timer = setTimeout(() => setShowInAppNotif(true), 2500);
     return () => clearTimeout(timer);
@@ -68,10 +68,9 @@ export function HomeScreen() {
     <div className="home-screen">
       <Header showLang showNotif />
 
-      {/* In-app notification */}
       {showInAppNotif && (
         <div className="home-inapp-notif" onClick={() => setShowInAppNotif(false)}>
-          <span>🚨 Новый срочный сигнал по Bitcoin!</span>
+          <span>{t('home.urgentNotif')}</span>
           <button onClick={() => setShowInAppNotif(false)}>✕</button>
         </div>
       )}
@@ -83,14 +82,12 @@ export function HomeScreen() {
         onTouchEnd={handleTouchEnd}
         style={{ transform: isPulling ? `translateY(${pullY}px)` : undefined, transition: isPulling ? 'none' : 'transform 0.3s ease' }}
       >
-        {/* Pull to refresh indicator */}
         {isPulling && pullY > 20 && (
           <div className="home-pull-indicator" style={{ opacity: Math.min(pullY / 50, 1) }}>
-            {pullY > 50 ? '↑ Отпустите для обновления' : '↓ Потяните для обновления'}
+            {pullY > 50 ? t('home.pullRelease') : t('home.pullDown')}
           </div>
         )}
 
-        {/* Refreshing loader */}
         {isRefreshing && (
           <div className="home-refreshing">
             <div className="spinner" />
@@ -98,7 +95,6 @@ export function HomeScreen() {
           </div>
         )}
 
-        {/* Balance card */}
         <div className="home-section">
           <button className="balance-card" onClick={() => navigate('/portfolio')}>
             <div className="balance-card__top">
@@ -106,16 +102,15 @@ export function HomeScreen() {
               <span className="balance-card__portfolio">{t('home.portfolio')}</span>
             </div>
             <div className="balance-card__amount">
-              ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${profile.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="balance-card__change">
-              <span className="balance-card__badge">+{balanceChange}%</span>
-              <span className="balance-card__change-desc">за сегодня</span>
+              <span className="balance-card__badge">+{profile.balanceChangePct}%</span>
+              <span className="balance-card__change-desc">{t('home.todayChange')}</span>
             </div>
           </button>
         </div>
 
-        {/* Market carousel */}
         <div className="home-section">
           <h2 className="home-section__title">{t('home.today')}</h2>
           <div className="home-carousel">
@@ -125,7 +120,6 @@ export function HomeScreen() {
           </div>
         </div>
 
-        {/* Recommendations */}
         <div className="home-section">
           <h2 className="home-section__title">{t('home.recommendations')}</h2>
           <div className="home-signals-list">

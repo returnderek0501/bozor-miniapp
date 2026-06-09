@@ -1,22 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Header } from '../../components/Header/Header';
+import { useUserStore } from '../../store/userStore';
 import './PortfolioScreen.css';
-
-const portfolioAssets = [
-  { symbol: 'BTC', name: 'Bitcoin', emoji: '₿', amount: 0.21, value: 14368.31, pnl: 842.10, pnlPct: 6.23 },
-  { symbol: 'ETH', name: 'Ethereum', emoji: 'Ξ', amount: 1.85, value: 7107.89, pnl: -312.40, pnlPct: -4.21 },
-  { symbol: 'AAPL', name: 'Apple', emoji: '🍎', amount: 10, value: 2135.00, pnl: 95.30, pnlPct: 4.67 },
-  { symbol: 'NVDA', name: 'NVIDIA', emoji: '🎮', amount: 3, value: 2625.60, pnl: 124.80, pnlPct: 4.99 },
-  { symbol: 'XAU', name: 'Золото', emoji: '🥇', amount: 0.1, value: 238.56, pnl: 8.30, pnlPct: 3.61 },
-];
 
 export function PortfolioScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { portfolio } = useUserStore();
 
-  const totalValue = portfolioAssets.reduce((sum, a) => sum + a.value, 0);
-  const totalPnl = portfolioAssets.reduce((sum, a) => sum + a.pnl, 0);
+  const totalValue = portfolio.reduce((sum, a) => sum + a.value, 0);
+  const totalPnl = portfolio.reduce((sum, a) => sum + a.pnl, 0);
   const totalPnlPct = (totalPnl / (totalValue - totalPnl)) * 100;
 
   return (
@@ -24,7 +18,6 @@ export function PortfolioScreen() {
       <Header title={t('portfolio.title')} onBack={() => navigate(-1)} />
 
       <div className="portfolio-body">
-        {/* Total balance */}
         <div className="portfolio-total-card">
           <div className="portfolio-total__label">{t('portfolio.total')}</div>
           <div className="portfolio-total__amount">
@@ -41,10 +34,9 @@ export function PortfolioScreen() {
           </div>
         </div>
 
-        {/* Assets */}
         <h3 className="portfolio-section-title">{t('portfolio.assets')}</h3>
         <div className="portfolio-assets">
-          {portfolioAssets.map(asset => (
+          {portfolio.map(asset => (
             <button
               key={asset.symbol}
               className="portfolio-asset"
@@ -53,7 +45,7 @@ export function PortfolioScreen() {
               <div className="portfolio-asset__icon">{asset.emoji}</div>
               <div className="portfolio-asset__info">
                 <div className="portfolio-asset__symbol">{asset.symbol}</div>
-                <div className="portfolio-asset__amount">{asset.amount} шт.</div>
+                <div className="portfolio-asset__amount">{asset.amount} {t('portfolio.units')}</div>
               </div>
               <div className="portfolio-asset__right">
                 <div className="portfolio-asset__value">

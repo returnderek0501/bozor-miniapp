@@ -4,11 +4,14 @@ import { signals as initialSignals } from '../data/signals';
 
 interface SignalState {
   signals: Signal[];
+  visibleIds: string[] | null;
   activeSignalId: string | null;
   showSignalDetail: boolean;
   showUrgentPopup: boolean;
   urgentSignalId: string | null;
 
+  setVisibleIds: (ids: string[] | null) => void;
+  getVisibleSignals: () => Signal[];
   openSignalDetail: (id: string) => void;
   closeSignalDetail: () => void;
   openUrgentPopup: (id: string) => void;
@@ -18,12 +21,21 @@ interface SignalState {
   addGeneratedSignal: (signal: Signal) => void;
 }
 
-export const useSignalStore = create<SignalState>((set) => ({
+export const useSignalStore = create<SignalState>((set, get) => ({
   signals: initialSignals,
+  visibleIds: null,
   activeSignalId: null,
   showSignalDetail: false,
   showUrgentPopup: false,
   urgentSignalId: null,
+
+  setVisibleIds: (ids) => set({ visibleIds: ids }),
+
+  getVisibleSignals: () => {
+    const { signals, visibleIds } = get();
+    if (!visibleIds) return signals;
+    return signals.filter(s => visibleIds.includes(s.id));
+  },
 
   openSignalDetail: (id) =>
     set((state) => {

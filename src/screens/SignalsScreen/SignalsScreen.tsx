@@ -6,7 +6,8 @@ import './SignalsScreen.css';
 
 export function SignalsScreen() {
   const { t } = useTranslation();
-  const { signals } = useSignalStore();
+  const { getVisibleSignals } = useSignalStore();
+  const signals = getVisibleSignals();
 
   const urgentSignals = signals.filter(s => s.isUrgent);
   const regularSignals = signals.filter(s => !s.isUrgent);
@@ -19,7 +20,7 @@ export function SignalsScreen() {
         {urgentSignals.length > 0 && (
           <div className="signals-section">
             <div className="signals-section__header">
-              <h2 className="signals-section__title">🚨 Срочные сигналы</h2>
+              <h2 className="signals-section__title">{t('signals.urgent')}</h2>
               <span className="signals-urgent-count">{urgentSignals.length}</span>
             </div>
             <div className="signals-list">
@@ -31,7 +32,7 @@ export function SignalsScreen() {
         )}
 
         <div className="signals-section">
-          <h2 className="signals-section__title">📊 Все сигналы</h2>
+          <h2 className="signals-section__title">{t('signals.all')}</h2>
           <div className="signals-list">
             {regularSignals.map(signal => (
               <SignalCard key={signal.id} signal={signal} />

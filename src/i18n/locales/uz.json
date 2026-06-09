@@ -12,7 +12,11 @@
     "recommendations": "Bugungi tavsiyalar",
     "refreshMarket": "🔄 Bozorni yangilash",
     "refreshing": "Ma'lumotlar yangilanmoqda...",
-    "updated": "Yangilandi"
+    "updated": "Yangilandi",
+    "todayChange": "bugun uchun",
+    "pullRelease": "↑ Yangilash uchun qo'ying",
+    "pullDown": "↓ Yangilash uchun torting",
+    "urgentNotif": "🚨 Bitcoin bo'yicha yangi shoshilinch signal!"
   },
   "signal": {
     "buy": "SOTIB OL",
@@ -70,19 +74,26 @@
   "profile": {
     "title": "Profil",
     "level": "Investor",
+    "defaultName": "Investor",
     "writeOperator": "✉️ Operatorga yozish",
     "myPortfolio": "💼 Mening portfoliom",
     "settings": "⚙️ Sozlamalar",
     "exit": "🚪 Chiqish",
     "totalSignals": "Olingan signallar",
     "successRate": "Muvaffaqiyat darajasi",
-    "since": "Biz bilan"
+    "since": "Biz bilan",
+    "tagline": "Har bir uchun oddiy signallar"
   },
   "portfolio": {
     "title": "Mening portfoliom",
     "total": "Umumiy balans",
     "pnl": "Kunlik P&L",
-    "assets": "Mening aktivlarim"
+    "assets": "Mening aktivlarim",
+    "units": "dona"
+  },
+  "signals": {
+    "urgent": "🚨 Shoshilinch signallar",
+    "all": "📊 Barcha signallar"
   },
   "notifications": {
     "title": "Bildirishnomalar",

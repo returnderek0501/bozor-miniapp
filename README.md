@@ -1,73 +1,47 @@
-# React + TypeScript + Vite
+# Bozor — Telegram Mini App (demo)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Демо-макет инвестиционного приложения с сигналами для показа инвесторам.
 
-Currently, two official plugins are available:
+## Запуск
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run build
+npm start          # сервер + API + бот на :3000
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Для разработки фронтенда:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev        # Vite на :5173, API проксируется на :3000
 ```
+
+## Переменные окружения
+
+Скопируйте `.env.example` в `.env`:
+
+| Переменная | Описание |
+|------------|----------|
+| `BOT_TOKEN` | Токен Telegram-бота |
+| `ADMIN_IDS` | Telegram ID админов через запятую |
+| `PORT` | Порт сервера (по умолчанию 3000) |
+
+Для фронтенда на отдельном домене: `VITE_API_URL=https://your-server.railway.app`
+
+## Админ-команды бота
+
+```
+/user <telegram_id>              — профиль пользователя
+/set <id> name Alisher Karimov   — ФИО
+/set <id> balance 50000          — баланс
+/set <id> change 5.2             — % изменения за день
+/set <id> signals 42             — кол-во сигналов
+/set <id> success 85             — успешность %
+/set <id> since 2023             — год регистрации
+/set <id> level Premium          — уровень
+/set <id> lang uz                — язык (uz/ru)
+/notify <id> Заголовок | Текст   — уведомление в приложение + ЛС
+/users                           — список пользователей
+```
+
+Язык по умолчанию — **узбекский (UZ)**.

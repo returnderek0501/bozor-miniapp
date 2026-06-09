@@ -12,7 +12,11 @@
     "recommendations": "Рекомендации сегодня",
     "refreshMarket": "🔄 Обновить рынок",
     "refreshing": "Обновляем данные...",
-    "updated": "Обновлено"
+    "updated": "Обновлено",
+    "todayChange": "за сегодня",
+    "pullRelease": "↑ Отпустите для обновления",
+    "pullDown": "↓ Потяните для обновления",
+    "urgentNotif": "🚨 Новый срочный сигнал по Bitcoin!"
   },
   "signal": {
     "buy": "ПОКУПАЙ",
@@ -70,19 +74,26 @@
   "profile": {
     "title": "Профиль",
     "level": "Инвестор",
+    "defaultName": "Инвестор",
     "writeOperator": "✉️ Написать оператору",
     "myPortfolio": "💼 Мой портфель",
     "settings": "⚙️ Настройки",
     "exit": "🚪 Выйти",
     "totalSignals": "Сигналов получено",
     "successRate": "Успешность",
-    "since": "С нами с"
+    "since": "С нами с",
+    "tagline": "Простые сигналы для каждого"
   },
   "portfolio": {
     "title": "Мой портфель",
     "total": "Общий баланс",
     "pnl": "P&L за день",
-    "assets": "Мои активы"
+    "assets": "Мои активы",
+    "units": "шт."
+  },
+  "signals": {
+    "urgent": "🚨 Срочные сигналы",
+    "all": "📊 Все сигналы"
   },
   "notifications": {
     "title": "Уведомления",
