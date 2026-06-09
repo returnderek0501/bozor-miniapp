@@ -1,0 +1,51 @@
+{
+  "brand": {
+    "name": "Uztronix Holding",
+    "subtitle": "O'zbekiston Respublikasi",
+    "tagline": "Rasmiy axborot portali"
+  },
+  "auth": {
+    "title": "Tizimga kirish",
+    "description": "Xavfsiz kirish uchun Telegram orqali telefon raqamingizni tasdiqlang. Tizimga faqat ro'yxatdan o'tgan raqamlar kiritiladi.",
+    "button": "Telefon raqamini tasdiqlash",
+    "checking": "Tekshirilmoqda...",
+    "loading": "Yuklanmoqda..."
+  },
+  "error": {
+    "title": "Kirish rad etildi",
+    "sim": "Ushbu telefon raqami tizimga kiritilmagan.",
+    "simDetail": "Eski SIM-kartalar qo'llab-quvvatlanmaydi. Iltimos, administrator bilan bog'laning yoki yangilangan raqamdan foydalaning.",
+    "retry": "Qayta urinish",
+    "contactFailed": "Telefon raqami olinmadi. Iltimos, qayta urinib ko'ring."
+  },
+  "home": {
+    "welcome": "Xush kelibsiz",
+    "demo": "Demo versiya",
+    "demoNote": "To'liq funksional imkoniyatlar keyingi bosqichda taqdim etiladi.",
+    "sections": "Yo'nalishlar",
+    "news": "Yangiliklar",
+    "services": "Xizmatlar",
+    "about": "Holding haqida",
+    "aboutText": "Uztronix — O'zbekistonda raqamli infratuzilma, telekommunikatsiya va innovatsion texnologiyalar sohasidagi yetakchi holding.",
+    "readMore": "Batafsil",
+    "placeholder": "Ma'lumot tez orada joylashtiriladi"
+  },
+  "nav": {
+    "home": "Bosh sahifa",
+    "services": "Xizmatlar",
+    "profile": "Profil"
+  },
+  "profile": {
+    "title": "Profil",
+    "phone": "Telefon",
+    "status": "Holat",
+    "active": "Faol"
+  },
+  "services": {
+    "title": "Xizmatlar",
+    "telecom": "Telekommunikatsiya",
+    "digital": "Raqamli xizmatlar",
+    "infra": "Infratuzilma",
+    "innovation": "Innovatsiya markazi"
+  }
+}
