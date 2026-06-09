@@ -26,7 +26,9 @@ npm run dev        # Vite на :5173, API проксируется на :3000
 | `ADMIN_IDS` | Telegram ID админов через запятую |
 | `PORT` | Порт сервера (по умолчанию 3000) |
 
-Для фронтенда на отдельном домене: `VITE_API_URL=https://your-server.railway.app`
+**Production:** https://bozor-miniapp-production.up.railway.app
+
+Для фронтенда на отдельном домене: `VITE_API_URL=https://bozor-miniapp-production.up.railway.app`
 
 ## Админ-команды бота
 
