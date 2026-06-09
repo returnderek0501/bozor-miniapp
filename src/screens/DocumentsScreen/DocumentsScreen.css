@@ -1,0 +1,23 @@
+.documents {
+  padding: 16px;
+}
+
+.documents h2 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--navy);
+  margin-bottom: 16px;
+}
+
+.documents__placeholder {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.documents__placeholder p {
+  font-size: 14px;
+  color: var(--text-muted);
+}

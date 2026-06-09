@@ -1,0 +1,133 @@
+.withdraw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(11, 42, 74, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+}
+
+.withdraw-modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border-radius: 16px 16px 12px 12px;
+  padding: 24px 20px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+}
+
+.withdraw-modal h2 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.withdraw-modal__desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.withdraw-modal__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 16px;
+}
+
+.withdraw-modal__input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 16px;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+}
+
+.withdraw-modal__input:focus {
+  outline: none;
+  border-color: var(--navy);
+}
+
+.withdraw-modal__hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.withdraw-modal__error {
+  font-size: 13px;
+  color: var(--error);
+  background: var(--error-bg);
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.withdraw-modal__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.withdraw-modal__cancel,
+.withdraw-modal__submit {
+  flex: 1;
+  padding: 13px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.withdraw-modal__cancel {
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.withdraw-modal__submit {
+  background: var(--navy);
+  color: #fff;
+}
+
+.withdraw-modal__submit:disabled {
+  opacity: 0.6;
+}
+
+.withdraw-modal--success {
+  text-align: center;
+}
+
+.withdraw-modal__check {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.withdraw-modal--success p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.withdraw-modal--success .withdraw-modal__submit {
+  width: 100%;
+  margin-top: 20px;
+}

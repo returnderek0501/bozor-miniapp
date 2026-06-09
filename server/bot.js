@@ -1,5 +1,7 @@
 import {
-  listPhones, addPhone, removePhone, normalizePhone,
+  listPhones, addPhone, removePhone,
+  getEmployee, setEmployeeField, listEmployees,
+  addEmployeeCard, removeEmployeeCard, maskCard,
 } from './store.js';
 import { createBotApi } from './telegram.js';
 
@@ -18,11 +20,11 @@ function adminKeyboard() {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '📋 Ro\'yxat', callback_data: 'admin_list' },
-          { text: '➕ Qo\'shish', callback_data: 'admin_add_hint' },
+          { text: '📋 Telefonlar', callback_data: 'admin_list' },
+          { text: '👤 Xodimlar', callback_data: 'admin_employees' },
         ],
         [
-          { text: '➖ O\'chirish', callback_data: 'admin_remove_hint' },
+          { text: '➕ Telefon', callback_data: 'admin_add_hint' },
           { text: 'ℹ️ Yordam', callback_data: 'admin_help' },
         ],
       ],
@@ -32,28 +34,71 @@ function adminKeyboard() {
 
 function helpText() {
   return [
-    '<b>Uztronix — admin paneli</b>',
+    '<b>Uztronix — boshqaruv</b>',
     '',
-    'Foydalanuvchilar faqat ruxsat etilgan telefon raqamlari orqali Mini App ga kirishi mumkin.',
+    '<b>Telefonlar:</b>',
+    '/add &lt;raqam&gt; — kirish ruxsati',
+    '/remove &lt;raqam&gt; — o\'chirish',
+    '/list — telefonlar ro\'yxati',
     '',
-    '<b>Buyruqlar:</b>',
-    '/admin — boshqaruv paneli',
-    '/add &lt;raqam&gt; — raqam qo\'shish',
-    '/remove &lt;raqam&gt; — raqamni o\'chirish',
-    '/list — ruxsat etilgan raqamlar',
+    '<b>Xodim profili:</b>',
+    '/set &lt;telefon&gt; &lt;maydon&gt; &lt;qiymat&gt;',
+    '  maydonlar: name, position, dept, tenure, balance, id',
+    '/employee &lt;telefon&gt; — profilni ko\'rish',
     '',
-    '<i>Misol:</i> <code>/add +998901234567</code>',
+    '<b>Kartalar (chiqarish):</b>',
+    '/addcard &lt;telefon&gt; &lt;karta&gt;',
+    '/removecard &lt;telefon&gt; &lt;karta&gt;',
+    '',
+    '<i>Misollar:</i>',
+    '<code>/set +998901234567 name Alisher Karimov</code>',
+    '<code>/set +998901234567 balance 2500000</code>',
+    '<code>/set +998901234567 tenure 3 yil 6 oy</code>',
+    '<code>/addcard +998901234567 8600123456789012</code>',
   ].join('\n');
 }
 
 function formatPhoneList() {
   const phones = listPhones();
-  if (!phones.length) return 'Ruxsat etilgan raqamlar ro\'yxati bo\'sh.';
+  if (!phones.length) return 'Telefonlar ro\'yxati bo\'sh.';
   return [
-    `<b>Ruxsat etilgan raqamlar (${phones.length})</b>`,
+    `<b>Telefonlar (${phones.length})</b>`,
     '',
     ...phones.map(p => `• <code>${p}</code>`),
   ].join('\n');
+}
+
+function formatEmployee(emp) {
+  const cards = emp.allowedCards?.length
+    ? emp.allowedCards.map(c => `  • <code>${maskCard(c)}</code>`).join('\n')
+    : '  —';
+
+  return [
+    `<b>${emp.fullName || '—'}</b>`,
+    `Telefon: <code>${emp.phone}</code>`,
+    `ID: ${emp.employeeId || '—'}`,
+    `Lavozim: ${emp.position || '—'}`,
+    `Bo\'lim: ${emp.department || '—'}`,
+    `Staj: ${emp.tenure || '—'}`,
+    `Avans: ${formatMoney(emp.advanceBalance)} so\'m`,
+    `Kartalar:\n${cards}`,
+  ].join('\n');
+}
+
+function formatEmployeesList() {
+  const employees = listEmployees();
+  if (!employees.length) return 'Xodimlar ro\'yxati bo\'sh.';
+  return [
+    `<b>Xodimlar (${employees.length})</b>`,
+    '',
+    ...employees.map(e =>
+      `• <code>${e.phone}</code> — ${e.fullName || '—'} (${formatMoney(e.advanceBalance)} so\'m)`,
+    ),
+  ].join('\n');
+}
+
+function formatMoney(n) {
+  return Number(n || 0).toLocaleString('uz-UZ');
 }
 
 async function handleCommand(bot, msg) {
@@ -65,31 +110,31 @@ async function handleCommand(bot, msg) {
     await bot.sendMessage(chatId, [
       '<b>Uztronix Holding</b>',
       '',
-      'Rasmiy Telegram Mini App — xizmatlar va ma\'lumotlar portali.',
+      'Xodimlar shaxsiy kabineti — Telegram Mini App.',
       '',
-      'Kirish uchun Mini App tugmasidan foydalaning. Tizimga faqat ro\'yxatdan o\'tgan telefon raqamlari orqali kirish mumkin.',
+      'Kirish uchun telefon raqamingizni tasdiqlang.',
     ].join('\n'), {
       reply_markup: {
         inline_keyboard: [[
-          { text: '📱 Mini App ochish', web_app: { url: process.env.WEBAPP_URL || 'https://uztronix-miniapp.up.railway.app' } },
+          { text: '📱 Shaxsiy kabinet', web_app: { url: process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app' } },
         ]],
       },
     });
     if (isAdmin(fromId)) {
-      await bot.sendMessage(chatId, 'Siz admin sifatida tizimga ulangansiz.', adminKeyboard());
+      await bot.sendMessage(chatId, 'Boshqaruv paneli:', adminKeyboard());
     }
     return;
   }
 
   if (text === '/admin' && isAdmin(fromId)) {
-    await bot.sendMessage(chatId, '<b>Admin paneli</b>\n\nTelefon raqamlarini boshqaring:', adminKeyboard());
+    await bot.sendMessage(chatId, '<b>Boshqaruv paneli</b>', adminKeyboard());
     return;
   }
 
   if (!text.startsWith('/')) return;
 
   if (!isAdmin(fromId)) {
-    await bot.sendMessage(chatId, '⛔ Ushbu buyruq faqat administratorlar uchun.');
+    await bot.sendMessage(chatId, '⛔ Ruxsat yo\'q.');
     return;
   }
 
@@ -106,10 +151,15 @@ async function handleCommand(bot, msg) {
     return;
   }
 
+  if (cmd === '/employees') {
+    await bot.sendMessage(chatId, formatEmployeesList());
+    return;
+  }
+
   if (cmd === '/add' && parts[1]) {
     try {
-      const phone = addPhone(parts[1], fromId);
-      await bot.sendMessage(chatId, `✅ Raqam qo\'shildi: <code>${phone}</code>`);
+      const phone = addPhone(parts[1]);
+      await bot.sendMessage(chatId, `✅ Qo\'shildi: <code>${phone}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -119,7 +169,50 @@ async function handleCommand(bot, msg) {
   if (cmd === '/remove' && parts[1]) {
     try {
       const phone = removePhone(parts[1]);
-      await bot.sendMessage(chatId, `✅ Raqam o\'chirildi: <code>${phone}</code>`);
+      await bot.sendMessage(chatId, `✅ O\'chirildi: <code>${phone}</code>`);
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  if (cmd === '/employee' && parts[1]) {
+    try {
+      const emp = getEmployee(parts[1]);
+      await bot.sendMessage(chatId, formatEmployee(emp));
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  if (cmd === '/set' && parts.length >= 4) {
+    const phone = parts[1];
+    const field = parts[2];
+    const value = parts.slice(3).join(' ');
+    try {
+      const emp = setEmployeeField(phone, field, value);
+      await bot.sendMessage(chatId, `✅ Yangilandi\n\n${formatEmployee(emp)}`);
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  if (cmd === '/addcard' && parts[2]) {
+    try {
+      const card = addEmployeeCard(parts[1], parts[2]);
+      await bot.sendMessage(chatId, `✅ Karta qo\'shildi: <code>${maskCard(card)}</code>`);
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  if (cmd === '/removecard' && parts[2]) {
+    try {
+      const card = removeEmployeeCard(parts[1], parts[2]);
+      await bot.sendMessage(chatId, `✅ Karta o\'chirildi: <code>${maskCard(card)}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -136,13 +229,19 @@ async function handleCallback(bot, query) {
   const data = query.data;
 
   if (!isAdmin(fromId)) {
-    await bot.answerCallbackQuery(query.id, 'Admin huquqi yo\'q');
+    await bot.answerCallbackQuery(query.id, 'Ruxsat yo\'q');
     return;
   }
 
   if (data === 'admin_list') {
     await bot.answerCallbackQuery(query.id);
     await bot.editMessageText(chatId, messageId, formatPhoneList(), adminKeyboard());
+    return;
+  }
+
+  if (data === 'admin_employees') {
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageText(chatId, messageId, formatEmployeesList(), adminKeyboard());
     return;
   }
 
@@ -153,14 +252,8 @@ async function handleCallback(bot, query) {
   }
 
   if (data === 'admin_add_hint') {
-    await bot.answerCallbackQuery(query.id, 'Raqam qo\'shish: /add +998901234567');
-    await bot.sendMessage(chatId, 'Raqam qo\'shish uchun yuboring:\n<code>/add +998901234567</code>');
-    return;
-  }
-
-  if (data === 'admin_remove_hint') {
-    await bot.answerCallbackQuery(query.id, 'Raqam o\'chirish: /remove +998901234567');
-    await bot.sendMessage(chatId, 'Raqam o\'chirish uchun yuboring:\n<code>/remove +998901234567</code>');
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Telefon qo\'shish:\n<code>/add +998901234567</code>');
     return;
   }
 

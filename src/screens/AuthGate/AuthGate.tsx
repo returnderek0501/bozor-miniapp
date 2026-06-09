@@ -24,8 +24,6 @@ export function AuthGate({ onRequestContact }: Props) {
             {t('auth.button')}
           </button>
         </div>
-
-        <p className="auth-gate__footer">{t('home.demo')}</p>
       </div>
     </div>
   );

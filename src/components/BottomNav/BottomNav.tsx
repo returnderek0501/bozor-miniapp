@@ -9,15 +9,11 @@ export function BottomNav() {
     <nav className="bottom-nav">
       <NavLink to="/" className={({ isActive }) => `bottom-nav__item${isActive ? ' bottom-nav__item--active' : ''}`} end>
         <span className="bottom-nav__icon">⌂</span>
-        <span>{t('nav.home')}</span>
+        <span>{t('nav.cabinet')}</span>
       </NavLink>
-      <NavLink to="/services" className={({ isActive }) => `bottom-nav__item${isActive ? ' bottom-nav__item--active' : ''}`}>
-        <span className="bottom-nav__icon">☰</span>
-        <span>{t('nav.services')}</span>
-      </NavLink>
-      <NavLink to="/profile" className={({ isActive }) => `bottom-nav__item${isActive ? ' bottom-nav__item--active' : ''}`}>
-        <span className="bottom-nav__icon">◉</span>
-        <span>{t('nav.profile')}</span>
+      <NavLink to="/documents" className={({ isActive }) => `bottom-nav__item${isActive ? ' bottom-nav__item--active' : ''}`}>
+        <span className="bottom-nav__icon">📄</span>
+        <span>{t('nav.documents')}</span>
       </NavLink>
     </nav>
   );

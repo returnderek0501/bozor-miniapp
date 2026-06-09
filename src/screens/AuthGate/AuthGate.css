@@ -91,9 +91,3 @@
 .auth-gate__btn:active {
   background: var(--navy-light);
 }
-
-.auth-gate__footer {
-  margin-top: 24px;
-  font-size: 12px;
-  color: var(--text-muted);
-}

@@ -3,4 +3,5 @@ dist
 .env
 data/phones.json
 data/sessions.json
+data/employees.json
 *.local

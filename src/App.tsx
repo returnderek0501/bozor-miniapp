@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { checkAuthStatus, verifyPhone, type AuthStatus } from './api/client';
+import { checkAuthStatus, verifyPhone } from './api/client';
 import { AuthGate } from './screens/AuthGate/AuthGate';
 import { AccessDenied } from './screens/AccessDenied/AccessDenied';
-import { HomeScreen } from './screens/HomeScreen/HomeScreen';
-import { ServicesScreen } from './screens/ServicesScreen/ServicesScreen';
-import { ProfileScreen } from './screens/ProfileScreen/ProfileScreen';
+import { CabinetScreen } from './screens/CabinetScreen/CabinetScreen';
+import { DocumentsScreen } from './screens/DocumentsScreen/DocumentsScreen';
 import { BottomNav } from './components/BottomNav/BottomNav';
 import { Header } from './components/Header/Header';
 
@@ -15,13 +14,11 @@ type AppState = 'loading' | 'auth' | 'denied' | 'ready';
 export default function App() {
   const { t } = useTranslation();
   const [state, setState] = useState<AppState>('loading');
-  const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   const refreshAuth = useCallback(async () => {
     const status = await checkAuthStatus();
     if (status.authorized) {
-      setAuth(status);
       setState('ready');
       return status;
     }
@@ -56,7 +53,6 @@ export default function App() {
 
       const result = await verifyPhone(event.contact.phone_number);
       if (result.authorized) {
-        setAuth(result);
         setState('ready');
         tg.HapticFeedback?.impactOccurred('light');
       } else {
@@ -97,9 +93,8 @@ export default function App() {
       <Header />
       <div className="app-content">
         <Routes>
-          <Route path="/" element={<HomeScreen userName={auth?.user?.name} />} />
-          <Route path="/services" element={<ServicesScreen />} />
-          <Route path="/profile" element={<ProfileScreen phone={auth?.phone} name={auth?.user?.name} />} />
+          <Route path="/" element={<CabinetScreen />} />
+          <Route path="/documents" element={<DocumentsScreen />} />
         </Routes>
       </div>
       <BottomNav />
