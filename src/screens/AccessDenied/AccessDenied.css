@@ -4,7 +4,7 @@
 }
 
 .access-denied__strip {
-  height: 4px;
+  height: 3px;
   background: var(--error);
 }
 
@@ -14,6 +14,12 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.access-denied__logo {
+  width: min(220px, 70vw);
+  margin-bottom: 24px;
+  opacity: 0.85;
 }
 
 .access-denied__icon {
@@ -31,17 +37,10 @@
 }
 
 .access-denied h1 {
-  font-family: var(--font-serif);
   font-size: 22px;
+  font-weight: 600;
   color: var(--error);
   margin-bottom: 12px;
-}
-
-.access-denied__main {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 8px;
 }
 
 .access-denied__detail {
@@ -54,9 +53,9 @@
 
 .access-denied__btn {
   padding: 12px 32px;
-  background: var(--navy);
+  background: var(--primary);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius);
 }

@@ -20,9 +20,9 @@
 }
 
 .cabinet__name {
-  font-family: var(--font-serif);
   font-size: 22px;
-  color: var(--navy);
+  font-weight: 600;
+  color: var(--primary);
   line-height: 1.2;
 }
 
@@ -31,24 +31,25 @@
   margin-top: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--green);
-  background: var(--green-light);
+  color: var(--brand-blue);
+  background: var(--brand-blue-soft);
   padding: 3px 10px;
   border-radius: 6px;
 }
 
 .cabinet__balance-card {
-  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+  background: var(--primary);
   color: #fff;
   border-radius: var(--radius);
   padding: 20px;
   margin-bottom: 16px;
   box-shadow: var(--shadow);
+  border-top: 3px solid var(--brand-orange);
 }
 
 .cabinet__balance-label {
   font-size: 13px;
-  opacity: 0.8;
+  opacity: 0.85;
   margin-bottom: 6px;
 }
 
@@ -62,17 +63,17 @@
 .cabinet__balance-value span {
   font-size: 16px;
   font-weight: 500;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .cabinet__withdraw-btn {
   width: 100%;
   padding: 13px;
   background: #fff;
-  color: var(--navy);
+  color: var(--primary);
   font-size: 15px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 
 .cabinet__withdraw-btn:disabled {
@@ -81,7 +82,7 @@
 }
 
 .cabinet__withdraw-btn:active:not(:disabled) {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 .cabinet__info {
@@ -95,11 +96,11 @@
 
 .cabinet__info h3 {
   font-size: 14px;
-  font-weight: 700;
-  color: var(--navy);
+  font-weight: 600;
+  color: var(--primary);
   margin-bottom: 12px;
   padding-left: 10px;
-  border-left: 3px solid var(--green);
+  border-left: 3px solid var(--brand-orange);
 }
 
 .cabinet__rows {
@@ -132,8 +133,8 @@
 }
 
 .cabinet__last {
-  background: var(--gold-light);
-  border: 1px solid #E8D9A0;
+  background: var(--brand-orange-soft);
+  border: 1px solid #F0D8C4;
   border-radius: var(--radius);
   padding: 14px 16px;
   margin-bottom: 12px;
@@ -142,7 +143,7 @@
 .cabinet__last h3 {
   font-size: 13px;
   font-weight: 600;
-  color: var(--navy);
+  color: var(--primary);
   margin-bottom: 6px;
 }
 
@@ -155,9 +156,9 @@
   width: 100%;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   font-size: 14px;
   font-weight: 500;
-  color: var(--navy);
+  color: var(--primary);
   background: var(--surface);
 }

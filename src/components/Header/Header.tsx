@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Logo } from '../Logo/Logo';
 import './Header.css';
 
 export function Header() {
@@ -12,16 +13,10 @@ export function Header() {
 
   return (
     <header className="header">
-      <div className="header__strip" />
+      <div className="brand-strip" />
       <div className="header__inner">
         <div className="header__brand">
-          <div className="header__emblem" aria-hidden>
-            <span>U</span>
-          </div>
-          <div>
-            <h1 className="header__title">{t('brand.name')}</h1>
-            <p className="header__subtitle">{t('brand.subtitle')}</p>
-          </div>
+          <Logo variant="compact" />
         </div>
         <button type="button" className="header__lang" onClick={toggleLang}>
           {lang === 'uz' ? 'RU' : 'UZ'}

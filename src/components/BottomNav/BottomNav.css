@@ -23,7 +23,7 @@
 }
 
 .bottom-nav__item--active {
-  color: var(--navy);
+  color: var(--primary);
 }
 
 .bottom-nav__icon {
@@ -32,5 +32,5 @@
 }
 
 .bottom-nav__item--active .bottom-nav__icon {
-  color: var(--green);
+  color: var(--brand-orange);
 }

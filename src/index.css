@@ -1,21 +1,25 @@
 :root {
-  --navy: #0B2A4A;
-  --navy-light: #143A5E;
-  --green: #1E8C45;
-  --green-light: #E8F5EC;
-  --gold: #C9A227;
-  --gold-light: #FBF6E8;
-  --bg: #F4F7FA;
+  --brand-blue: #0066FF;
+  --brand-blue-dark: #0047B3;
+  --brand-blue-soft: #E8F1FF;
+  --brand-orange: #FF6600;
+  --brand-orange-soft: #FFF4EB;
+  --brand-gray: #8C9AAB;
+
+  --primary: var(--brand-blue-dark);
+  --primary-hover: #003D99;
+  --accent: var(--brand-orange);
+
+  --bg: #F5F7FA;
   --surface: #FFFFFF;
-  --text: #1A2B3C;
-  --text-muted: #5A6B7D;
-  --border: #D8E2EC;
+  --text: #1A2332;
+  --text-muted: #5C6B7A;
+  --border: #DDE3EA;
   --error: #B42318;
   --error-bg: #FEF3F2;
-  --radius: 12px;
-  --shadow: 0 2px 12px rgba(11, 42, 74, 0.08);
+  --radius: 10px;
+  --shadow: 0 1px 8px rgba(26, 35, 50, 0.06);
   --font-sans: 'Inter', system-ui, sans-serif;
-  --font-serif: 'PT Serif', Georgia, serif;
 }
 
 *,
@@ -78,11 +82,16 @@ a {
   width: 40px;
   height: 40px;
   border: 3px solid var(--border);
-  border-top-color: var(--navy);
+  border-top-color: var(--brand-blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.brand-strip {
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand-blue-dark) 0%, var(--brand-blue-dark) 50%, var(--brand-orange) 50%, var(--brand-orange) 100%);
 }

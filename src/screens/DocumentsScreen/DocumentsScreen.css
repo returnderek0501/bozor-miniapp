@@ -3,9 +3,9 @@
 }
 
 .documents h2 {
-  font-family: var(--font-serif);
   font-size: 20px;
-  color: var(--navy);
+  font-weight: 600;
+  color: var(--primary);
   margin-bottom: 16px;
 }
 

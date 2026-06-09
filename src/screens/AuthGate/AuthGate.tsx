@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Logo } from '../../components/Logo/Logo';
 import './AuthGate.css';
 
 interface Props {
@@ -41,11 +42,9 @@ export function AuthGate({ onVerify }: Props) {
 
   return (
     <div className="auth-gate">
-      <div className="auth-gate__strip" />
+      <div className="brand-strip" />
       <div className="auth-gate__body">
-        <div className="auth-gate__emblem" aria-hidden>U</div>
-        <p className="auth-gate__org">{t('brand.subtitle')}</p>
-        <h1 className="auth-gate__title">{t('brand.name')}</h1>
+        <Logo variant="full" className="auth-gate__logo" />
         <p className="auth-gate__tagline">{t('brand.tagline')}</p>
 
         <div className="auth-gate__card">

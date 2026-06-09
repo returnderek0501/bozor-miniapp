@@ -1,0 +1,14 @@
+.logo {
+  display: block;
+  user-select: none;
+}
+
+.logo--full {
+  width: min(280px, 88vw);
+  height: auto;
+}
+
+.logo--compact {
+  width: 120px;
+  height: auto;
+}
