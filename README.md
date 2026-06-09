@@ -25,7 +25,13 @@ npm start
 | `BOT_TOKEN` | Токен Telegram-бота |
 | `ADMIN_IDS` | ID администраторов через запятую |
 | `WEBAPP_URL` | URL Mini App для кнопки в боте |
+| `DATA_DIR` | Путь к Volume на Railway (по умолчанию `/main` если смонтирован, иначе `./data`) |
 | `PORT` | Порт сервера (по умолчанию 3000) |
+
+### Railway Volume
+
+Смонтируйте Volume в `/main` — телефоны, сессии и профили сотрудников сохраняются между деплоями.
+В логах при старте: `Data directory: /main`.
 
 ## Команды бота
 

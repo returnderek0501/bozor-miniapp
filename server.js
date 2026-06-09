@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createApiRouter } from './server/routes.js';
 import { startBot } from './server/bot.js';
+import { getDataDir } from './server/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -19,6 +20,7 @@ app.get('*', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Uztronix server running on port ${PORT}`);
+  console.log(`Data directory: ${getDataDir()}`);
   if (BOT_TOKEN) {
     startBot(BOT_TOKEN);
   } else {

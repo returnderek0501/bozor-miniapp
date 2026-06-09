@@ -1,3 +1,4 @@
+import { useTheme } from '../../hooks/useTheme';
 import './Logo.css';
 
 interface Props {
@@ -6,7 +7,14 @@ interface Props {
 }
 
 export function Logo({ variant = 'full', className = '' }: Props) {
-  const src = variant === 'compact' ? '/logo-header.svg' : '/logo-light.svg';
+  const { isDark } = useTheme();
+
+  let src: string;
+  if (variant === 'compact') {
+    src = '/logo-header.svg';
+  } else {
+    src = isDark ? '/logo-dark.svg' : '/logo-light.svg';
+  }
 
   return (
     <img

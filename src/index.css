@@ -95,3 +95,42 @@ a {
   height: 3px;
   background: linear-gradient(90deg, var(--brand-blue-dark) 0%, var(--brand-blue-dark) 50%, var(--brand-orange) 50%, var(--brand-orange) 100%);
 }
+
+[data-theme="dark"] {
+  --brand-blue-soft: #0F2440;
+  --brand-orange-soft: #2A1808;
+  --primary: #4D94FF;
+  --primary-hover: #6BA8FF;
+  --bg: #0D0D0D;
+  --surface: #1A1A1A;
+  --text: #F0F2F5;
+  --text-muted: #9AA5B4;
+  --border: #2E3338;
+  --error-bg: #2A1210;
+  --shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .cabinet__balance-card {
+  background: #003080;
+}
+
+[data-theme="dark"] .cabinet__last {
+  border-color: #4A3520;
+}
+
+.top-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0));
+}
+
+.header__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

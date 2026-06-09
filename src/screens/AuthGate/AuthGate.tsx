@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Logo } from '../../components/Logo/Logo';
+import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
 import './AuthGate.css';
 
 interface Props {
@@ -19,8 +20,12 @@ export function AuthGate({ onVerify }: Props) {
   const { t } = useTranslation();
   const [step, setStep] = useState<'welcome' | 'phone'>('welcome');
   const [phone, setPhone] = useState('');
+  const [focused, setFocused] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const showGhost = !focused && !phone;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +47,9 @@ export function AuthGate({ onVerify }: Props) {
 
   return (
     <div className="auth-gate">
+      <div className="top-bar">
+        <ThemeToggle />
+      </div>
       <div className="brand-strip" />
       <div className="auth-gate__body">
         <Logo variant="full" className="auth-gate__logo" />
@@ -65,17 +73,28 @@ export function AuthGate({ onVerify }: Props) {
                   {t('auth.phoneLabel')}
                   <div className="auth-gate__phone-row">
                     <span className="auth-gate__prefix">+998</span>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel"
-                      autoFocus
-                      placeholder="90 123 45 67"
-                      value={phone}
-                      onChange={e => setPhone(formatPhoneInput(e.target.value))}
-                      className="auth-gate__input"
-                      disabled={verifying}
-                    />
+                    <div
+                      className={`auth-gate__input-wrap${focused ? ' auth-gate__input-wrap--focused' : ''}`}
+                      onClick={() => inputRef.current?.focus()}
+                    >
+                      <input
+                        ref={inputRef}
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        autoFocus
+                        value={phone}
+                        onChange={e => setPhone(formatPhoneInput(e.target.value))}
+                        onFocus={() => setFocused(true)}
+                        onBlur={() => setFocused(false)}
+                        className="auth-gate__input"
+                        disabled={verifying}
+                        aria-label={t('auth.phoneLabel')}
+                      />
+                      {showGhost && (
+                        <span className="auth-gate__ghost" aria-hidden>90 123 45 67</span>
+                      )}
+                    </div>
                   </div>
                 </label>
                 {error && <p className="auth-gate__error">{error}</p>}
@@ -85,7 +104,7 @@ export function AuthGate({ onVerify }: Props) {
                 <button
                   type="button"
                   className="auth-gate__back"
-                  onClick={() => { setStep('welcome'); setError(''); }}
+                  onClick={() => { setStep('welcome'); setError(''); setPhone(''); }}
                   disabled={verifying}
                 >
                   {t('auth.back')}

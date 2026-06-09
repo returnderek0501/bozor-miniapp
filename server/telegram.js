@@ -53,5 +53,8 @@ export function createBotApi(token) {
       const res = await fetch(`${base}/getUpdates?timeout=30&offset=${offset || 0}`);
       return res.json();
     },
+
+    setChatMenuButton: (menuButton) =>
+      call('setChatMenuButton', { menu_button: menuButton }),
   };
 }

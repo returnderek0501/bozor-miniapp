@@ -3,7 +3,14 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '..', 'data');
+
+function resolveDataDir() {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (existsSync('/main')) return '/main';
+  return join(__dirname, '..', 'data');
+}
+
+const DATA_DIR = resolveDataDir();
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
 const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
 const EMPLOYEES_FILE = join(DATA_DIR, 'employees.json');
@@ -254,6 +261,10 @@ export function withdrawAdvance(rawPhone, rawCard, amount) {
   writeEmployees(all);
 
   return { amount: sum, balance: emp.advanceBalance, card: maskCard(card) };
+}
+
+export function getDataDir() {
+  return DATA_DIR;
 }
 
 export function maskCard(card) {

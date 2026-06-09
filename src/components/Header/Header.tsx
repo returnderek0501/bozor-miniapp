@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Logo } from '../Logo/Logo';
+import { ThemeToggle } from '../ThemeToggle/ThemeToggle';
 import './Header.css';
 
 export function Header() {
@@ -18,9 +19,12 @@ export function Header() {
         <div className="header__brand">
           <Logo variant="compact" />
         </div>
-        <button type="button" className="header__lang" onClick={toggleLang}>
-          {lang === 'uz' ? 'RU' : 'UZ'}
-        </button>
+        <div className="header__controls">
+          <ThemeToggle />
+          <button type="button" className="header__lang" onClick={toggleLang}>
+            {lang === 'uz' ? 'RU' : 'UZ'}
+          </button>
+        </div>
       </div>
       <p className="header__tagline">{t('brand.tagline')}</p>
     </header>

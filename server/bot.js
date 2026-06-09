@@ -101,6 +101,29 @@ function formatMoney(n) {
   return Number(n || 0).toLocaleString('uz-UZ');
 }
 
+function webAppUrl() {
+  return process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
+}
+
+function miniAppReplyKeyboard() {
+  return {
+    keyboard: [[{
+      text: '📱 Shaxsiy kabinetni ochish',
+      web_app: { url: webAppUrl() },
+    }]],
+    resize_keyboard: true,
+  };
+}
+
+function miniAppInlineKeyboard() {
+  return {
+    inline_keyboard: [[{
+      text: '📱 Shaxsiy kabinet',
+      web_app: { url: webAppUrl() },
+    }]],
+  };
+}
+
 async function handleCommand(bot, msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
@@ -108,17 +131,16 @@ async function handleCommand(bot, msg) {
 
   if (text === '/start') {
     await bot.sendMessage(chatId, [
-      '<b>Uztronix Holding</b>',
+      '<b>Uztronix</b>',
       '',
-      'Xodimlar shaxsiy kabineti — Telegram Mini App.',
+      'Xodimlar shaxsiy kabineti.',
       '',
-      'Kirish uchun telefon raqamingizni tasdiqlang.',
+      'Mini App ni ochish uchun quyidagi tugmani bosing.',
     ].join('\n'), {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: '📱 Shaxsiy kabinet', web_app: { url: process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app' } },
-        ]],
-      },
+      reply_markup: miniAppReplyKeyboard(),
+    });
+    await bot.sendMessage(chatId, 'Yoki shu tugma orqali:', {
+      reply_markup: miniAppInlineKeyboard(),
     });
     if (isAdmin(fromId)) {
       await bot.sendMessage(chatId, 'Boshqaruv paneli:', adminKeyboard());
@@ -264,6 +286,14 @@ export function startBot(token) {
   const bot = createBotApi(token);
   let offset = 0;
   let running = true;
+
+  bot.setChatMenuButton({
+    type: 'web_app',
+    text: 'Shaxsiy kabinet',
+    web_app: { url: webAppUrl() },
+  }).then(res => {
+    if (!res.ok) console.warn('Menu button setup failed:', res.description);
+  }).catch(e => console.warn('Menu button setup error:', e.message));
 
   async function poll() {
     while (running) {

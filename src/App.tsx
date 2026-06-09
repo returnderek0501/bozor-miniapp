@@ -8,6 +8,7 @@ import { CabinetScreen } from './screens/CabinetScreen/CabinetScreen';
 import { DocumentsScreen } from './screens/DocumentsScreen/DocumentsScreen';
 import { BottomNav } from './components/BottomNav/BottomNav';
 import { Header } from './components/Header/Header';
+import { ThemeToggle } from './components/ThemeToggle/ThemeToggle';
 
 type AppState = 'loading' | 'auth' | 'denied' | 'ready';
 
@@ -50,6 +51,9 @@ export default function App() {
   if (state === 'loading') {
     return (
       <div className="app-loader">
+        <div className="top-bar">
+          <ThemeToggle />
+        </div>
         <div className="app-loader__spinner" />
         <span>{t('auth.loading')}</span>
       </div>

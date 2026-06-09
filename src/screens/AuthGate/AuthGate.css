@@ -92,20 +92,46 @@
   color: var(--primary);
 }
 
-.auth-gate__input {
+.auth-gate__input-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
-  padding: 12px 14px;
   border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.auth-gate__input-wrap--focused {
+  border-color: var(--brand-blue);
+}
+
+.auth-gate__input {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
   border-radius: var(--radius);
   font-size: 16px;
   font-family: inherit;
   letter-spacing: 0.03em;
+  background: transparent;
+  color: var(--text);
+  caret-color: var(--brand-blue);
 }
 
 .auth-gate__input:focus {
   outline: none;
-  border-color: var(--brand-blue);
+}
+
+.auth-gate__ghost {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  pointer-events: none;
+  letter-spacing: 0.03em;
 }
 
 .auth-gate__error {

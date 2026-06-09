@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
 import './AccessDenied.css';
 
 interface Props {
@@ -11,6 +12,9 @@ export function AccessDenied({ message, onRetry }: Props) {
 
   return (
     <div className="access-denied">
+      <div className="top-bar">
+        <ThemeToggle />
+      </div>
       <div className="access-denied__strip" />
       <div className="access-denied__body">
         <div className="access-denied__icon" aria-hidden>!</div>
