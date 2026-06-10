@@ -26,12 +26,36 @@ npm start
 | `ADMIN_IDS` | ID администраторов через запятую |
 | `WEBAPP_URL` | URL Mini App для кнопки в боте |
 | `DATA_DIR` | Путь к Volume на Railway (по умолчанию `/main` если смонтирован, иначе `./data`) |
+| `GOOGLE_SHEETS_ID` | ID Google-таблицы для real-time синхронизации |
+| `GOOGLE_SHEETS_TAB` | Имя вкладки (по умолчанию `Сотрудники`) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | JSON ключ service account (одной строкой) |
 | `PORT` | Порт сервера (по умолчанию 3000) |
 
 ### Railway Volume
 
 Смонтируйте Volume в `/main` — телефоны, сессии и профили сотрудников сохраняются между деплоями.
 В логах при старте: `Data directory: /main`.
+
+### Google Sheets (real-time)
+
+1. Создайте Google Spreadsheet, вкладку назовите `Сотрудники`
+2. Создайте Service Account в Google Cloud, включите Sheets API
+3. Дайте service account email доступ «Редактор» к таблице
+4. В Railway добавьте `GOOGLE_SHEETS_ID` и `GOOGLE_SERVICE_ACCOUNT_JSON` (весь JSON одной строкой)
+
+Таблица обновляется автоматически при любом изменении данных. Также: `/export` в боте — Excel-файл.
+
+## Команды бота (дополнительно)
+
+**Операторы:** `/addoperator Имя` `/removeoperator Имя` `/listoperators`  
+`/pickoperator +998...` — выбор кнопкой или своё имя
+
+**Этапы:** `/addstage Название` `/removestage id` `/liststages`  
+`/pickstage +998...` — выбор кнопкой  
+Базовые этапы: `v_rabote` (В работе), `ozhidanie` (Ожидание), `ignor` (Игнор)
+
+**Админы:** `/addadmin 123456789` `/removeadmin 123456789` `/listadmins`  
+**Экспорт:** `/export`
 
 ## Команды бота
 

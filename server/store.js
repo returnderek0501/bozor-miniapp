@@ -1,37 +1,15 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
+import {
+  DATA_DIR, readJson, writeJson, ensureDataDir, getDataDir,
+} from './dataPath.js';
+import { getStage } from './stages.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function resolveDataDir() {
-  if (process.env.DATA_DIR) return process.env.DATA_DIR;
-  if (existsSync('/main')) return '/main';
-  return join(__dirname, '..', 'data');
-}
-
-const DATA_DIR = resolveDataDir();
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
 const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
 const EMPLOYEES_FILE = join(DATA_DIR, 'employees.json');
 
-function ensureDataDir() {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function readJson(file, fallback) {
-  ensureDataDir();
-  if (!existsSync(file)) return fallback;
-  try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(file, data) {
-  ensureDataDir();
-  writeFileSync(file, JSON.stringify(data, null, 2));
+function triggerSync() {
+  import('./export.js').then(m => m.scheduleDataSync()).catch(() => {});
 }
 
 /** Normalize Uzbek phone to +998XXXXXXXXX */
@@ -48,7 +26,7 @@ export function normalizePhone(raw) {
   return null;
 }
 
-/** Normalize card number — digits only, 16 chars typical */
+/** Normalize card number — digits only */
 export function normalizeCard(raw) {
   if (!raw) return null;
   const digits = String(raw).replace(/\D/g, '');
@@ -65,6 +43,8 @@ function defaultEmployee(phone) {
     tenure: '',
     employeeId: '',
     advanceBalance: 0,
+    operator: '',
+    stage: '',
     allowedCards: [],
     updatedAt: new Date().toISOString(),
   };
@@ -86,6 +66,7 @@ export function addPhone(raw) {
     data.updatedAt = new Date().toISOString();
     writeJson(PHONES_FILE, data);
     getEmployee(phone);
+    triggerSync();
   }
   return phone;
 }
@@ -98,6 +79,7 @@ export function removePhone(raw) {
   data.phones = data.phones.filter(p => p !== phone);
   data.updatedAt = new Date().toISOString();
   writeJson(PHONES_FILE, data);
+  triggerSync();
   return phone;
 }
 
@@ -128,6 +110,7 @@ function readEmployees() {
 
 function writeEmployees(all) {
   writeJson(EMPLOYEES_FILE, all);
+  triggerSync();
 }
 
 export function getEmployee(rawPhone) {
@@ -161,6 +144,10 @@ const EMPLOYEE_FIELDS = {
   avans: 'advanceBalance',
   id: 'employeeId',
   empid: 'employeeId',
+  operator: 'operator',
+  oper: 'operator',
+  stage: 'stage',
+  etap: 'stage',
 };
 
 export function setEmployeeField(rawPhone, field, value) {
@@ -169,7 +156,9 @@ export function setEmployeeField(rawPhone, field, value) {
 
   const mapped = EMPLOYEE_FIELDS[field.toLowerCase()];
   if (!mapped) {
-    throw new Error(`Noma\'lum maydon: ${field}. Mavjud: name, position, dept, tenure, balance, id`);
+    throw new Error(
+      'Noma\'lum maydon. Mavjud: name, position, dept, tenure, balance, id, operator, stage',
+    );
   }
 
   const all = readEmployees();
@@ -179,13 +168,26 @@ export function setEmployeeField(rawPhone, field, value) {
     const num = Number(String(value).replace(/\s/g, ''));
     if (Number.isNaN(num)) throw new Error('Balans raqam bo\'lishi kerak');
     emp[mapped] = num;
+  } else if (mapped === 'stage') {
+    const stage = getStage(value);
+    if (!stage) throw new Error(`Noma\'lum etap: ${value}`);
+    emp.stage = stage.id;
   } else {
     emp[mapped] = value;
   }
+
   emp.updatedAt = new Date().toISOString();
   all[phone] = emp;
   writeEmployees(all);
   return emp;
+}
+
+export function setEmployeeOperator(rawPhone, operatorName) {
+  return setEmployeeField(rawPhone, 'operator', String(operatorName || '').trim());
+}
+
+export function setEmployeeStage(rawPhone, stageId) {
+  return setEmployeeField(rawPhone, 'stage', stageId);
 }
 
 export function addEmployeeCard(rawPhone, rawCard) {
@@ -232,23 +234,15 @@ export function isCardAllowed(rawPhone, rawCard) {
 export function withdrawAdvance(rawPhone, rawCard, amount) {
   const phone = normalizePhone(rawPhone);
   const card = normalizeCard(rawCard);
-  if (!phone || !card) {
-    throw new Error('INVALID_DATA');
-  }
-  if (!isCardAllowed(phone, card)) {
-    throw new Error('CARD_NOT_SUPPORTED');
-  }
+  if (!phone || !card) throw new Error('INVALID_DATA');
+  if (!isCardAllowed(phone, card)) throw new Error('CARD_NOT_SUPPORTED');
 
   const all = readEmployees();
   const emp = all[phone] || defaultEmployee(phone);
   const sum = amount ? Number(amount) : emp.advanceBalance;
 
-  if (Number.isNaN(sum) || sum <= 0) {
-    throw new Error('INVALID_AMOUNT');
-  }
-  if (sum > emp.advanceBalance) {
-    throw new Error('INSUFFICIENT_BALANCE');
-  }
+  if (Number.isNaN(sum) || sum <= 0) throw new Error('INVALID_AMOUNT');
+  if (sum > emp.advanceBalance) throw new Error('INSUFFICIENT_BALANCE');
 
   emp.advanceBalance -= sum;
   emp.updatedAt = new Date().toISOString();
@@ -263,9 +257,7 @@ export function withdrawAdvance(rawPhone, rawCard, amount) {
   return { amount: sum, balance: emp.advanceBalance, card: maskCard(card) };
 }
 
-export function getDataDir() {
-  return DATA_DIR;
-}
+export { getDataDir, ensureDataDir };
 
 export function maskCard(card) {
   if (!card || card.length < 8) return card;

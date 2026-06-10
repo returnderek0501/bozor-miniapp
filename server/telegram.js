@@ -56,5 +56,15 @@ export function createBotApi(token) {
 
     setChatMenuButton: (menuButton) =>
       call('setChatMenuButton', { menu_button: menuButton }),
+
+    sendDocument: async (chatId, buffer, filename) => {
+      const form = new FormData();
+      form.append('chat_id', String(chatId));
+      form.append('document', new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }), filename);
+      const res = await fetch(`${base}/sendDocument`, { method: 'POST', body: form });
+      return res.json();
+    },
   };
 }
