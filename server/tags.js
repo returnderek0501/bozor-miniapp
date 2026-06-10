@@ -13,8 +13,6 @@ const DEFAULT_TAGS = [
   { id: 'pasport', label: 'Паспорт получен', description: 'Клиент прислал фото паспорта', scope: 'global' },
   { id: 'dogovor', label: 'Договор подписан', description: 'Клиент подписал договор', scope: 'global' },
   { id: 'v_rabote', label: 'В работе', description: 'Клиент в активной работе', scope: 'global' },
-  { id: 'ozhidanie', label: 'Ожидание', description: 'Ожидание действия от клиента', scope: 'global' },
-  { id: 'ignor', label: 'Игнор', description: 'Клиент не отвечает', scope: 'global' },
 ];
 
 function migrateTag(tag, index) {
