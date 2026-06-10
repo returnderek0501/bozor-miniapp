@@ -1,6 +1,13 @@
 import { google } from 'googleapis';
 import { listEmployees } from './store.js';
-import { HEADERS, rowsFromEmployees } from './exportData.js';
+import {
+  HEADERS_MAIN,
+  HEADERS_TAG_HISTORY,
+  rowsFromEmployees,
+  tagHistoryRows,
+  groupByOperator,
+  sanitizeSheetName,
+} from './exportData.js';
 
 let sheetsClient = null;
 
@@ -33,20 +40,46 @@ export function isSheetsConfigured() {
   return !!(process.env.GOOGLE_SHEETS_ID && getCredentials());
 }
 
+async function ensureSheet(spreadsheetId, title) {
+  const sheets = getSheetsApi();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = meta.data.sheets?.some(s => s.properties?.title === title);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title } } }] },
+    });
+  }
+}
+
+async function writeSheet(spreadsheetId, title, headers, rows) {
+  await ensureSheet(spreadsheetId, title);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${title}'!A1`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [headers, ...rows] },
+  });
+}
+
 export async function syncToGoogleSheets() {
   const sheets = getSheetsApi();
-  const sheetId = process.env.GOOGLE_SHEETS_ID;
-  if (!sheets || !sheetId) return { ok: false, reason: 'not_configured' };
+  const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+  if (!sheets || !spreadsheetId) return { ok: false, reason: 'not_configured' };
 
-  const sheetName = process.env.GOOGLE_SHEETS_TAB || 'Сотрудники';
-  const values = [HEADERS, ...rowsFromEmployees(listEmployees())];
+  const employees = listEmployees();
 
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: sheetId,
-    range: `'${sheetName}'!A1`,
-    valueInputOption: 'RAW',
-    requestBody: { values },
-  });
+  await writeSheet(spreadsheetId, 'Все лиды', HEADERS_MAIN, rowsFromEmployees(employees));
+  await writeSheet(spreadsheetId, 'История тегов', HEADERS_TAG_HISTORY, tagHistoryRows(employees));
 
-  return { ok: true, rows: values.length - 1 };
+  for (const [operator, emps] of groupByOperator(employees)) {
+    await writeSheet(
+      spreadsheetId,
+      sanitizeSheetName(operator),
+      HEADERS_MAIN,
+      rowsFromEmployees(emps),
+    );
+  }
+
+  return { ok: true, rows: employees.length };
 }

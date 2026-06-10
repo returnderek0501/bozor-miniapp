@@ -2,7 +2,9 @@ import { join } from 'path';
 import {
   DATA_DIR, readJson, writeJson, ensureDataDir, getDataDir,
 } from './dataPath.js';
-import { getStage } from './stages.js';
+import { getTag } from './tags.js';
+import { isAdmin } from './admins.js';
+import { getOperatorByTelegramId } from './operators.js';
 
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
 const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
@@ -12,21 +14,15 @@ function triggerSync() {
   import('./export.js').then(m => m.scheduleDataSync()).catch(() => {});
 }
 
-/** Normalize Uzbek phone to +998XXXXXXXXX */
 export function normalizePhone(raw) {
   if (!raw) return null;
   let digits = String(raw).replace(/\D/g, '');
   if (digits.startsWith('998')) digits = digits.slice(3);
-  if (digits.length === 9 && digits.startsWith('9')) {
-    return `+998${digits}`;
-  }
-  if (digits.length === 12 && digits.startsWith('998')) {
-    return `+${digits}`;
-  }
+  if (digits.length === 9 && digits.startsWith('9')) return `+998${digits}`;
+  if (digits.length === 12 && digits.startsWith('998')) return `+${digits}`;
   return null;
 }
 
-/** Normalize card number — digits only */
 export function normalizeCard(raw) {
   if (!raw) return null;
   const digits = String(raw).replace(/\D/g, '');
@@ -44,10 +40,41 @@ function defaultEmployee(phone) {
     employeeId: '',
     advanceBalance: 0,
     operator: '',
-    stage: '',
+    operatorId: '',
+    tags: [],
+    tagHistory: [],
     allowedCards: [],
+    createdAt: null,
+    createdBy: null,
+    createdByName: '',
     updatedAt: new Date().toISOString(),
   };
+}
+
+function migrateEmployee(emp) {
+  if (emp.stage && (!emp.tags || !emp.tags.length)) {
+    const tag = getTag(emp.stage);
+    const at = emp.updatedAt || new Date().toISOString();
+    emp.tags = [{
+      id: emp.stage,
+      label: tag?.label || emp.stage,
+      assignedAt: at,
+      assignedBy: null,
+      assignedByName: 'migratsiya',
+    }];
+    emp.tagHistory = [{
+      id: emp.stage,
+      label: tag?.label || emp.stage,
+      action: 'add',
+      at,
+      by: null,
+      byName: 'migratsiya',
+    }];
+    delete emp.stage;
+  }
+  if (!emp.tags) emp.tags = [];
+  if (!emp.tagHistory) emp.tagHistory = [];
+  return emp;
 }
 
 export function listPhones() {
@@ -55,17 +82,35 @@ export function listPhones() {
   return data.phones || [];
 }
 
-export function addPhone(raw) {
+export function addPhone(raw, actor = null) {
   const phone = normalizePhone(raw);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami. Misol: +998901234567');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
-  if (!data.phones.includes(phone)) {
+  const isNew = !data.phones.includes(phone);
+  if (isNew) {
     data.phones.push(phone);
     data.phones.sort();
     data.updatedAt = new Date().toISOString();
     writeJson(PHONES_FILE, data);
-    getEmployee(phone);
+  }
+
+  const emp = getEmployee(phone);
+  if (isNew && actor) {
+    const all = readEmployees();
+    const e = migrateEmployee(all[phone] || emp);
+    const now = new Date().toISOString();
+    e.createdAt = now;
+    e.createdBy = actor.id;
+    e.createdByName = actor.name;
+    if (actor.operatorName) {
+      e.operator = actor.operatorName;
+      e.operatorId = actor.operatorId || '';
+    }
+    e.updatedAt = now;
+    all[phone] = e;
+    writeEmployees(all);
+  } else if (isNew) {
     triggerSync();
   }
   return phone;
@@ -120,34 +165,40 @@ export function getEmployee(rawPhone) {
   if (!all[phone]) {
     all[phone] = defaultEmployee(phone);
     writeEmployees(all);
+    return all[phone];
   }
-  return all[phone];
+  const migrated = migrateEmployee({ ...all[phone] });
+  if (JSON.stringify(migrated) !== JSON.stringify(all[phone])) {
+    all[phone] = migrated;
+    writeJson(EMPLOYEES_FILE, all);
+  }
+  return migrated;
 }
 
 export function listEmployees() {
-  const phones = listPhones();
-  return phones.map(p => getEmployee(p));
+  return listPhones().map(p => getEmployee(p));
+}
+
+export function listEmployeesForUser(telegramId) {
+  const all = listEmployees();
+  if (isAdmin(telegramId)) return all;
+  const op = getOperatorByTelegramId(telegramId);
+  if (!op) return [];
+  return all.filter(e =>
+    e.operator === op.name
+    || e.operatorId === op.id
+    || e.createdBy === Number(telegramId),
+  );
 }
 
 const EMPLOYEE_FIELDS = {
-  name: 'fullName',
-  ism: 'fullName',
-  fio: 'fullName',
-  position: 'position',
-  lavozim: 'position',
-  dept: 'department',
-  bolim: 'department',
-  bo_lim: 'department',
-  tenure: 'tenure',
-  staj: 'tenure',
-  balance: 'advanceBalance',
-  avans: 'advanceBalance',
-  id: 'employeeId',
-  empid: 'employeeId',
-  operator: 'operator',
-  oper: 'operator',
-  stage: 'stage',
-  etap: 'stage',
+  name: 'fullName', ism: 'fullName', fio: 'fullName',
+  position: 'position', lavozim: 'position',
+  dept: 'department', bolim: 'department', bo_lim: 'department',
+  tenure: 'tenure', staj: 'tenure',
+  balance: 'advanceBalance', avans: 'advanceBalance',
+  id: 'employeeId', empid: 'employeeId',
+  operator: 'operator', oper: 'operator',
 };
 
 export function setEmployeeField(rawPhone, field, value) {
@@ -156,22 +207,16 @@ export function setEmployeeField(rawPhone, field, value) {
 
   const mapped = EMPLOYEE_FIELDS[field.toLowerCase()];
   if (!mapped) {
-    throw new Error(
-      'Noma\'lum maydon. Mavjud: name, position, dept, tenure, balance, id, operator, stage',
-    );
+    throw new Error('Noma\'lum maydon. Mavjud: name, position, dept, tenure, balance, id, operator');
   }
 
   const all = readEmployees();
-  const emp = all[phone] || defaultEmployee(phone);
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
 
   if (mapped === 'advanceBalance') {
     const num = Number(String(value).replace(/\s/g, ''));
     if (Number.isNaN(num)) throw new Error('Balans raqam bo\'lishi kerak');
     emp[mapped] = num;
-  } else if (mapped === 'stage') {
-    const stage = getStage(value);
-    if (!stage) throw new Error(`Noma\'lum etap: ${value}`);
-    emp.stage = stage.id;
   } else {
     emp[mapped] = value;
   }
@@ -182,12 +227,98 @@ export function setEmployeeField(rawPhone, field, value) {
   return emp;
 }
 
-export function setEmployeeOperator(rawPhone, operatorName) {
-  return setEmployeeField(rawPhone, 'operator', String(operatorName || '').trim());
+export function setEmployeeOperator(rawPhone, operatorName, operatorId = '') {
+  const phone = normalizePhone(rawPhone);
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  emp.operator = String(operatorName || '').trim();
+  emp.operatorId = operatorId || '';
+  emp.updatedAt = new Date().toISOString();
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
 }
 
-export function setEmployeeStage(rawPhone, stageId) {
-  return setEmployeeField(rawPhone, 'stage', stageId);
+function pushTagHistory(emp, entry) {
+  emp.tagHistory = emp.tagHistory || [];
+  emp.tagHistory.push(entry);
+}
+
+export function addClientTag(rawPhone, tagId, actor) {
+  const phone = normalizePhone(rawPhone);
+  const tag = getTag(tagId);
+  if (!phone) throw new Error('Noto\'g\'ri telefon');
+  if (!tag) throw new Error(`Noma\'lum teg: ${tagId}`);
+
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  const now = new Date().toISOString();
+  const existing = emp.tags.find(t => t.id === tagId);
+
+  if (existing) {
+    existing.assignedAt = now;
+    existing.assignedBy = actor?.id ?? null;
+    existing.assignedByName = actor?.name || '';
+    existing.label = tag.label;
+  } else {
+    emp.tags.push({
+      id: tagId,
+      label: tag.label,
+      assignedAt: now,
+      assignedBy: actor?.id ?? null,
+      assignedByName: actor?.name || '',
+    });
+  }
+
+  pushTagHistory(emp, {
+    id: tagId,
+    label: tag.label,
+    action: 'add',
+    at: now,
+    by: actor?.id ?? null,
+    byName: actor?.name || '',
+  });
+
+  emp.updatedAt = now;
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
+}
+
+export function removeClientTag(rawPhone, tagId, actor) {
+  const phone = normalizePhone(rawPhone);
+  const tag = getTag(tagId);
+  if (!phone) throw new Error('Noto\'g\'ri telefon');
+
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  const now = new Date().toISOString();
+  const label = tag?.label || tagId;
+
+  emp.tags = emp.tags.filter(t => t.id !== tagId);
+  pushTagHistory(emp, {
+    id: tagId,
+    label,
+    action: 'remove',
+    at: now,
+    by: actor?.id ?? null,
+    byName: actor?.name || '',
+  });
+
+  emp.updatedAt = now;
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
+}
+
+export function toggleClientTag(rawPhone, tagId, actor) {
+  const emp = getEmployee(rawPhone);
+  const has = emp.tags.some(t => t.id === tagId);
+  return has ? removeClientTag(rawPhone, tagId, actor) : addClientTag(rawPhone, tagId, actor);
+}
+
+export function hasClientTag(emp, tagId) {
+  return (emp.tags || []).some(t => t.id === tagId);
 }
 
 export function addEmployeeCard(rawPhone, rawCard) {
@@ -197,7 +328,7 @@ export function addEmployeeCard(rawPhone, rawCard) {
   if (!card) throw new Error('Noto\'g\'ri karta raqami');
 
   const all = readEmployees();
-  const emp = all[phone] || defaultEmployee(phone);
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   if (!emp.allowedCards.includes(card)) {
     emp.allowedCards.push(card);
     emp.allowedCards.sort();
@@ -215,7 +346,7 @@ export function removeEmployeeCard(rawPhone, rawCard) {
   if (!card) throw new Error('Noto\'g\'ri karta raqami');
 
   const all = readEmployees();
-  const emp = all[phone] || defaultEmployee(phone);
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   emp.allowedCards = emp.allowedCards.filter(c => c !== card);
   emp.updatedAt = new Date().toISOString();
   all[phone] = emp;
@@ -227,8 +358,7 @@ export function isCardAllowed(rawPhone, rawCard) {
   const phone = normalizePhone(rawPhone);
   const card = normalizeCard(rawCard);
   if (!phone || !card) return false;
-  const emp = getEmployee(phone);
-  return emp.allowedCards.includes(card);
+  return getEmployee(phone).allowedCards.includes(card);
 }
 
 export function withdrawAdvance(rawPhone, rawCard, amount) {
@@ -238,7 +368,7 @@ export function withdrawAdvance(rawPhone, rawCard, amount) {
   if (!isCardAllowed(phone, card)) throw new Error('CARD_NOT_SUPPORTED');
 
   const all = readEmployees();
-  const emp = all[phone] || defaultEmployee(phone);
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   const sum = amount ? Number(amount) : emp.advanceBalance;
 
   if (Number.isNaN(sum) || sum <= 0) throw new Error('INVALID_AMOUNT');

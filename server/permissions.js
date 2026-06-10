@@ -1,0 +1,43 @@
+import { isAdmin } from './admins.js';
+import { getOperatorByTelegramId, isOperator } from './operators.js';
+
+export function getActor(telegramId, displayName = '') {
+  const id = Number(telegramId);
+  if (isAdmin(id)) {
+    return { id, name: displayName || 'Admin', isAdmin: true };
+  }
+  const op = getOperatorByTelegramId(id);
+  if (op) {
+    return {
+      id,
+      name: op.name,
+      isAdmin: false,
+      operatorId: op.id,
+      operatorName: op.name,
+    };
+  }
+  return null;
+}
+
+export function hasStaffAccess(telegramId) {
+  return isAdmin(telegramId) || isOperator(telegramId);
+}
+
+export function canExport(telegramId) {
+  return isAdmin(telegramId);
+}
+
+export function canManageClient(telegramId, emp) {
+  if (isAdmin(telegramId)) return true;
+  const op = getOperatorByTelegramId(telegramId);
+  if (!op) return false;
+  return (
+    emp.operator === op.name
+    || emp.operatorId === op.id
+    || emp.createdBy === Number(telegramId)
+  );
+}
+
+export function canManageTagDefinitions(telegramId) {
+  return hasStaffAccess(telegramId);
+}

@@ -49,6 +49,13 @@ export function createBotApi(token) {
     editMessageText: (chatId, messageId, text, extra = {}) =>
       call('editMessageText', { chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', ...extra }),
 
+    editMessageReplyMarkup: (chatId, messageId, replyMarkup) =>
+      call('editMessageReplyMarkup', {
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: replyMarkup,
+      }),
+
     getUpdates: async (offset) => {
       const res = await fetch(`${base}/getUpdates?timeout=30&offset=${offset || 0}`);
       return res.json();

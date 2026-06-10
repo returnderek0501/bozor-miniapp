@@ -47,15 +47,19 @@ npm start
 
 ## Команды бота (дополнительно)
 
-**Операторы:** `/addoperator Имя` `/removeoperator Имя` `/listoperators`  
-`/pickoperator +998...` — выбор кнопкой или своё имя
+**Операторы:** `/addoperator TelegramID Имя` `/linkoperator` `/listoperators`  
+`/pickoperator +998...` — выбор кнопкой или своё имя  
 
-**Этапы:** `/addstage Название` `/removestage id` `/liststages`  
-`/pickstage +998...` — выбор кнопкой  
-Базовые этапы: `v_rabote` (В работе), `ozhidanie` (Ожидание), `ignor` (Игнор)
+**Теги (CRM):** `/addtag Название` `/removetag id` `/listtags`  
+`/picktags +998...` — несколько тегов одновременно (кнопки ✓)  
+Базовые теги: `v_rabote` (В работе), `ozhidanie` (Ожидание), `ignor` (Игнор)  
+У лида может быть несколько активных тегов; для каждого сохраняется дата/время назначения.
+
+**Роли:** операторы добавляют клиентов, данные и теги; **полный отчёт** (`/export`) — только админам.  
+В Excel/Google Sheets: лист «Все лиды», «История тегов», отдельный лист на каждого оператора.
 
 **Админы:** `/addadmin 123456789` `/removeadmin 123456789` `/listadmins`  
-**Экспорт:** `/export`
+**Экспорт (только админ):** `/export`
 
 ## Команды бота
 
@@ -71,7 +75,7 @@ npm start
 - `/set +998901234567 tenure 3 yil 6 oy`
 - `/set +998901234567 balance 2500000`
 - `/set +998901234567 id UZT-042`
-- `/set +998901234567 operator Имя` / `/set +998901234567 stage v_rabote`
+- `/set +998901234567 operator Имя` / `/set +998901234567 tag v_rabote` (добавить тег)
 - `/employee +998901234567` — просмотр профиля
 - `/employees` — список всех
 
