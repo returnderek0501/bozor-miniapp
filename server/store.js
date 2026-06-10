@@ -4,7 +4,6 @@ import {
 } from './dataPath.js';
 import { getTag } from './tags.js';
 import { isAdmin } from './admins.js';
-import { getOperatorByTelegramId } from './operators.js';
 import { assignClientIdIfMissing } from './clientIds.js';
 
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
@@ -29,6 +28,15 @@ export function normalizeCard(raw) {
   const digits = String(raw).replace(/\D/g, '');
   if (digits.length < 12 || digits.length > 19) return null;
   return digits;
+}
+
+function assignActorToClient(emp, actor) {
+  if (!actor) return;
+  emp.createdBy = actor.id;
+  emp.createdByName = actor.name || '';
+  const opName = actor.operatorName || actor.name || '';
+  emp.operator = opName;
+  emp.operatorId = actor.operatorId || '';
 }
 
 function defaultEmployee(phone) {
@@ -105,12 +113,7 @@ export function addPhone(raw, actor = null) {
     const now = new Date().toISOString();
     assignClientIdIfMissing(e);
     e.createdAt = now;
-    e.createdBy = actor.id;
-    e.createdByName = actor.name;
-    if (actor.operatorName) {
-      e.operator = actor.operatorName;
-      e.operatorId = actor.operatorId || '';
-    }
+    assignActorToClient(e, actor);
     e.updatedAt = now;
     all[phone] = e;
     writeEmployees(all);
@@ -145,6 +148,33 @@ export function isPhoneAllowed(raw) {
 export function getSession(telegramId) {
   const sessions = readJson(SESSIONS_FILE, {});
   return sessions[String(telegramId)] || null;
+}
+
+function readAllSessions() {
+  return readJson(SESSIONS_FILE, {});
+}
+
+export function listTelegramIdsForPhones(phones) {
+  const wanted = new Set(phones);
+  const sessions = readAllSessions();
+  const ids = [];
+  for (const [tid, s] of Object.entries(sessions)) {
+    if (s?.phone && wanted.has(s.phone)) ids.push(Number(tid));
+  }
+  return ids;
+}
+
+export function listAllClientTelegramIds() {
+  return Object.keys(readAllSessions()).map(Number);
+}
+
+export function getTelegramIdByPhone(phone) {
+  const normalized = normalizePhone(phone);
+  const sessions = readAllSessions();
+  for (const [tid, s] of Object.entries(sessions)) {
+    if (s?.phone === normalized) return Number(tid);
+  }
+  return null;
 }
 
 export function setSession(telegramId, phone) {
@@ -190,9 +220,7 @@ export function listEmployees() {
 export function listEmployeesForUser(telegramId) {
   const all = listEmployees();
   if (isAdmin(telegramId)) return all;
-  const op = getOperatorByTelegramId(telegramId);
-  if (!op) return [];
-  return all.filter(e => e.operatorId === op.id || e.operator === op.name);
+  return all.filter(e => e.createdBy === Number(telegramId));
 }
 
 export function findEmployeeByClientId(clientId) {
@@ -254,11 +282,14 @@ function pushTagHistory(emp, entry) {
   emp.tagHistory.push(entry);
 }
 
-export function addClientTag(rawPhone, tagId, actor, photo = null) {
+export function addClientTag(rawPhone, tagId, actor, extras = null) {
   const phone = normalizePhone(rawPhone);
   const tag = getTag(tagId);
   if (!phone) throw new Error('Noto\'g\'ri telefon');
   if (!tag) throw new Error(`Noma\'lum teg: ${tagId}`);
+
+  const photo = extras?.photo || null;
+  const note = extras?.note ? String(extras.note).trim() : '';
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
@@ -272,6 +303,7 @@ export function addClientTag(rawPhone, tagId, actor, photo = null) {
     existing.assignedBy = actor?.id ?? null;
     existing.assignedByName = actor?.name || '';
     if (photo) existing.photo = photo;
+    if (note) existing.note = note;
   } else {
     const entry = {
       id: tagId,
@@ -279,34 +311,33 @@ export function addClientTag(rawPhone, tagId, actor, photo = null) {
       assignedAt: now,
       assignedBy: actor?.id ?? null,
       assignedByName: actor?.name || '',
+      note: note || '',
     };
     if (photo) entry.photo = photo;
     emp.tags.push(entry);
   }
 
+  let action = 'add';
+  if (photo && note) action = 'add_note_photo';
+  else if (photo) action = 'photo';
+  else if (note) action = 'note';
+
   const historyEntry = {
     id: tagId,
     label: tag.label,
-    action: photo ? 'photo' : 'add',
+    action,
     at: now,
     by: actor?.id ?? null,
     byName: actor?.name || '',
   };
   if (photo) historyEntry.photo = photo;
+  if (note) historyEntry.note = note;
   pushTagHistory(emp, historyEntry);
 
   emp.updatedAt = now;
   all[phone] = emp;
   writeEmployees(all);
   return emp;
-}
-
-export function attachClientTagPhoto(rawPhone, tagId, actor, photo) {
-  if (!photo?.fileId) throw new Error('Foto yuborilmagan');
-  const emp = getEmployee(rawPhone);
-  const hasTag = emp.tags?.some(t => t.id === tagId);
-  if (!hasTag) return addClientTag(rawPhone, tagId, actor, photo);
-  return addClientTag(rawPhone, tagId, actor, photo);
 }
 
 export function removeClientTag(rawPhone, tagId, actor) {

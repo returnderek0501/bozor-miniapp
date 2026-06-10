@@ -41,6 +41,7 @@ export const HEADERS_TAG_HISTORY = [
   'Действие',
   'Время',
   'Кто назначил',
+  'Комментарий',
   'Фото',
 ];
 
@@ -87,6 +88,7 @@ export function tagHistoryRows(employees) {
         h.action === 'remove' ? 'Снят' : h.action === 'photo' ? 'Фото' : 'Добавлен',
         formatTagTime(h.at),
         h.byName || (h.by ? String(h.by) : ''),
+        h.note || '',
         h.photo?.path ? 'да' : '—',
       ]);
     }

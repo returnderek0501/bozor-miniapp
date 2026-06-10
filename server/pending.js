@@ -1,18 +1,24 @@
-const customOperator = new Map();
 const addClient = new Map();
 const findClient = new Map();
-const tagPhoto = new Map();
+const tagAdd = new Map();
+const editField = new Map();
+const broadcast = new Map();
+const addStaff = new Map();
 
 export function clearAllPending(chatId) {
-  customOperator.delete(chatId);
   addClient.delete(chatId);
   findClient.delete(chatId);
-  tagPhoto.delete(chatId);
+  tagAdd.delete(chatId);
+  editField.delete(chatId);
+  broadcast.delete(chatId);
+  addStaff.delete(chatId);
 }
 
 export const pending = {
-  customOperator,
   addClient,
   findClient,
-  tagPhoto,
+  tagAdd,
+  editField,
+  broadcast,
+  addStaff,
 };

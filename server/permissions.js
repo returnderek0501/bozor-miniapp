@@ -27,16 +27,10 @@ export function canExport(telegramId) {
   return isAdmin(telegramId);
 }
 
-function isAssignedOperator(telegramId, emp) {
-  const op = getOperatorByTelegramId(telegramId);
-  if (!op || !emp) return false;
-  return emp.operatorId === op.id || emp.operator === op.name;
-}
-
 export function canManageClient(telegramId, emp) {
   if (isAdmin(telegramId)) return true;
   if (!emp) return false;
-  return isAssignedOperator(telegramId, emp);
+  return emp.createdBy === Number(telegramId);
 }
 
 export function canViewClient(telegramId, emp) {
