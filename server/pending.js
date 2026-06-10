@@ -4,6 +4,7 @@ const tagAdd = new Map();
 const editField = new Map();
 const broadcast = new Map();
 const addStaff = new Map();
+const addTagLabel = new Map();
 
 export function clearAllPending(chatId) {
   addClient.delete(chatId);
@@ -12,6 +13,7 @@ export function clearAllPending(chatId) {
   editField.delete(chatId);
   broadcast.delete(chatId);
   addStaff.delete(chatId);
+  addTagLabel.delete(chatId);
 }
 
 export const pending = {
@@ -21,4 +23,5 @@ export const pending = {
   editField,
   broadcast,
   addStaff,
+  addTagLabel,
 };

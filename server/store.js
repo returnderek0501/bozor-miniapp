@@ -4,7 +4,7 @@ import {
 } from './dataPath.js';
 import { getTag } from './tags.js';
 import { isAdmin } from './admins.js';
-import { assignClientIdIfMissing } from './clientIds.js';
+import { assignClientIdIfMissing, normalizeClientId } from './clientIds.js';
 
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
 const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
@@ -224,9 +224,9 @@ export function listEmployeesForUser(telegramId) {
 }
 
 export function findEmployeeByClientId(clientId) {
-  const key = String(clientId || '').trim().toUpperCase();
+  const key = normalizeClientId(clientId);
   if (!key) return null;
-  return listEmployees().find(e => e.clientId?.toUpperCase() === key) || null;
+  return listEmployees().find(e => String(e.clientId) === String(key)) || null;
 }
 
 const EMPLOYEE_FIELDS = {

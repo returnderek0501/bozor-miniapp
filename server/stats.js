@@ -15,7 +15,7 @@ export function todayClientsSummary() {
   if (!today.length) return '<b>Клиенты за сегодня</b>\n\nПока никого не добавили.';
 
   const lines = today.map(e =>
-    `• <b>${e.fullName || '—'}</b> — <code>${e.phone}</code>\n  Оператор: ${e.operator || e.createdByName || '—'}`,
+    `• <b>${e.fullName || '—'}</b> — #${e.clientId || '—'} — <code>${e.phone}</code>\n  Оператор: ${e.operator || e.createdByName || '—'}`,
   );
   return [`<b>Клиенты за сегодня (${today.length})</b>`, '', ...lines].join('\n');
 }
