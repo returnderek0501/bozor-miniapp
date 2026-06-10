@@ -1,9 +1,9 @@
 import {
   listPhones, addPhone, removePhone,
-  getEmployee, setEmployeeField, listEmployeesForUser,
+  getEmployee, setEmployeeField, listEmployeesForUser, findEmployeeByClientId,
   addEmployeeCard, removeEmployeeCard, maskCard,
-  setEmployeeOperator, normalizePhone, toggleClientTag,
-  hasClientTag, addClientTag, removeClientTag,
+  setEmployeeOperator, normalizePhone, getClientTag,
+  addClientTag, removeClientTag,
 } from './store.js';
 import { isAdmin, listAdmins, addAdmin, removeAdmin, isEnvAdmin } from './admins.js';
 import {
@@ -11,33 +11,45 @@ import {
 } from './operators.js';
 import { listTags, addTag, removeTag, formatTagTime } from './tags.js';
 import {
-  getActor, hasStaffAccess, canExport, canManageClient, canManageTagDefinitions,
+  getActor, hasStaffAccess, canExport, canManageClient, canViewClient, canManageTagDefinitions,
 } from './permissions.js';
 import { buildExcelBuffer, getExportFilename } from './export.js';
 import { isSheetsConfigured } from './sheets.js';
 import { createBotApi } from './telegram.js';
+import { saveTelegramFile, attachmentAbsolutePath } from './attachments.js';
 
 const pendingCustomOperator = new Map();
+const pendingAddClient = new Map();
+const pendingFindClient = new Map();
+const pendingTagPhoto = new Map();
+
+function panelKeyboard(telegramId) {
+  return isAdmin(telegramId) ? adminKeyboard() : operatorKeyboard();
+}
 
 function adminKeyboard() {
   return {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '📋 Lidlar', callback_data: 'admin_list' },
-          { text: '👤 Mijozlar', callback_data: 'admin_employees' },
+          { text: '👤 Все клиенты', callback_data: 'adm_clients' },
+          { text: '➕ Новый лид', callback_data: 'adm_add' },
         ],
         [
-          { text: '📊 To\'liq hisobot', callback_data: 'admin_export' },
-          { text: '🏷 Teglar', callback_data: 'admin_tags' },
+          { text: '🔍 Поиск', callback_data: 'adm_find' },
+          { text: '🏷 Тег + фото', callback_data: 'adm_tag_menu' },
         ],
         [
-          { text: '👔 Operatorlar', callback_data: 'admin_operators' },
-          { text: '🔑 Adminlar', callback_data: 'admin_admins' },
+          { text: '📊 Экспорт', callback_data: 'admin_export' },
+          { text: '📋 Телефоны', callback_data: 'admin_list' },
         ],
         [
-          { text: '➕ Lid', callback_data: 'admin_add_hint' },
-          { text: 'ℹ️ Yordam', callback_data: 'admin_help' },
+          { text: '🏷 Справочник тегов', callback_data: 'admin_tags' },
+          { text: '👔 Операторы', callback_data: 'admin_operators' },
+        ],
+        [
+          { text: '🔑 Админы', callback_data: 'admin_admins' },
+          { text: 'ℹ️ Помощь', callback_data: 'admin_help' },
         ],
       ],
     },
@@ -49,12 +61,16 @@ function operatorKeyboard() {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '👤 Mening lidlarim', callback_data: 'op_my_leads' },
-          { text: '🏷 Teglar', callback_data: 'admin_tags' },
+          { text: '👤 Мои клиенты', callback_data: 'op_clients' },
+          { text: '➕ Новый клиент', callback_data: 'op_add' },
         ],
         [
-          { text: '➕ Lid qo\'shish', callback_data: 'admin_add_hint' },
-          { text: 'ℹ️ Yordam', callback_data: 'op_help' },
+          { text: '🔍 Поиск', callback_data: 'op_find' },
+          { text: '🏷 Тег + фото', callback_data: 'op_tag_menu' },
+        ],
+        [
+          { text: '🏷 Справочник тегов', callback_data: 'admin_tags' },
+          { text: 'ℹ️ Помощь', callback_data: 'op_help' },
         ],
       ],
     },
@@ -65,18 +81,20 @@ function adminHelpText() {
   return [
     '<b>Admin — CRM</b>',
     '',
-    '<b>Lidlar:</b> /add /remove /list /employees',
-    '<b>Profil:</b> /set &lt;tel&gt; &lt;maydon&gt; &lt;qiymat&gt;',
-    '/employee &lt;tel&gt; — kartochka + teg tugmalari',
-    '/picktags &lt;tel&gt; — teglarni yoqish/o\'chirish',
-    '/tag &lt;tel&gt; &lt;teg_id&gt; | /untag &lt;tel&gt; &lt;teg_id&gt;',
+    '<b>Частые действия</b> — кнопки в панели.',
+    '<b>Клиенты:</b> /add /remove /list /employees',
+    '<b>Поиск:</b> CLT-000001 или +998...',
+    '<b>Профиль:</b> /set &lt;tel&gt; &lt;поле&gt; &lt;значение&gt;',
+    '/employee &lt;tel&gt; — карточка клиента',
+    '/picktags &lt;tel&gt; — назначить тег (нужно фото)',
+    '/tag &lt;tel&gt; &lt;teg_id&gt; — после выбора отправьте фото',
     '',
-    '<b>Teglar:</b> /addtag /removetag /listtags',
-    '<b>Operatorlar:</b> /addoperator &lt;id&gt; Ism | /linkoperator &lt;id&gt; Ism',
-    '<b>Adminlar:</b> /addadmin /removeadmin /listadmins',
-    '<b>Eksport:</b> /export (faqat admin)',
+    '<b>Теги = действия клиента</b> (паспорт, договор и т.д.)',
+    'К каждому тегу прикрепляется фото-подтверждение.',
     '',
-    '<i>Sheets:</i> ' + (isSheetsConfigured() ? 'real-time' : 'o\'chirilgan'),
+    '<b>Теги:</b> /addtag /removetag /listtags',
+    '<b>Операторы:</b> /addoperator &lt;id&gt; Имя',
+    '<b>Экспорт:</b> /export',
   ].join('\n');
 }
 
@@ -84,22 +102,24 @@ function operatorHelpText() {
   return [
     '<b>Operator — CRM</b>',
     '',
-    '/add +998... — yangi lid (sizga biriktiriladi)',
-    '/employees — mening lidlarim',
-    '/employee +998... — kartochka',
-    '/set +998... name ... — ma\'lumot yangilash',
-    '/picktags +998... — teglar (bir nechta)',
-    '/addtag YangiTeg — yangi teg yaratish',
-    '/listtags — teglar ro\'yxati',
+    'Кнопки панели — основные действия.',
+    '/add +998... — новый клиент (только ваши)',
+    '/employees — только клиенты, которых вы внесли',
+    'Поиск: CLT-000001 или телефон',
+    '/picktags +998... — тег + фото подтверждения',
     '',
-    'To\'liq hisobot faqat adminlarga.',
+    'Вы видите только своих клиентов.',
+    'Полный отчёт — только у админов.',
   ].join('\n');
 }
 
 function formatTagsList(emp) {
   if (!emp.tags?.length) return '—';
   return emp.tags
-    .map(t => `• ${t.label} <i>(${formatTagTime(t.assignedAt)})</i>`)
+    .map(t => {
+      const photo = t.photo?.path ? ' 📎' : '';
+      return `• ${t.label}${photo} <i>(${formatTagTime(t.assignedAt)})</i>`;
+    })
     .join('\n');
 }
 
@@ -110,49 +130,48 @@ function formatEmployee(emp) {
 
   return [
     `<b>${emp.fullName || '—'}</b>`,
-    `Telefon: <code>${emp.phone}</code>`,
-    `Operator: ${emp.operator || '—'}`,
-    `Teglar:\n${formatTagsList(emp)}`,
-    `ID: ${emp.employeeId || '—'}`,
-    `Lavozim: ${emp.position || '—'}`,
-    `Bo\'lim: ${emp.department || '—'}`,
-    `Staj: ${emp.tenure || '—'}`,
-    `Avans: ${formatMoney(emp.advanceBalance)} so\'m`,
-    `Yaratilgan: ${emp.createdAt ? formatTagTime(emp.createdAt) : '—'} (${emp.createdByName || '—'})`,
-    `Kartalar:\n${cards}`,
+    `ID: <code>${emp.clientId || '—'}</code>`,
+    `Телефон: <code>${emp.phone}</code>`,
+    `Оператор: ${emp.operator || '—'}`,
+    `Теги (действия):\n${formatTagsList(emp)}`,
+    `Сотрудник ID: ${emp.employeeId || '—'}`,
+    `Должность: ${emp.position || '—'}`,
+    `Отдел: ${emp.department || '—'}`,
+    `Стаж: ${emp.tenure || '—'}`,
+    `Аванс: ${formatMoney(emp.advanceBalance)} сум`,
+    `Создан: ${emp.createdAt ? formatTagTime(emp.createdAt) : '—'} (${emp.createdByName || '—'})`,
+    `Карты:\n${cards}`,
   ].join('\n');
 }
 
 function formatEmployeesList(telegramId) {
   const employees = listEmployeesForUser(telegramId);
-  if (!employees.length) return 'Lidlar ro\'yxati bo\'sh.';
+  if (!employees.length) return 'Список пуст.';
+  const title = isAdmin(telegramId) ? 'Все клиенты' : 'Мои клиенты';
   return [
-    `<b>Lidlar (${employees.length})</b>`,
+    `<b>${title} (${employees.length})</b>`,
     '',
     ...employees.map(e => {
       const tags = e.tags?.map(t => t.label).join(', ') || '—';
-      return `• <code>${e.phone}</code> — ${e.fullName || '—'} | ${e.operator || '—'} | ${tags}`;
+      return `• <code>${e.clientId || '—'}</code> <code>${e.phone}</code> — ${e.fullName || '—'} | ${tags}`;
     }),
   ].join('\n');
 }
 
-function formatPhoneList(telegramId) {
-  if (isAdmin(telegramId)) {
-    const phones = listPhones();
-    if (!phones.length) return 'Telefonlar bo\'sh.';
-    return [`<b>Telefonlar (${phones.length})</b>`, '', ...phones.map(p => `• <code>${p}</code>`)].join('\n');
-  }
-  return formatEmployeesList(telegramId);
+function formatPhoneList() {
+  const phones = listPhones();
+  if (!phones.length) return 'Телефоны пусты.';
+  return [`<b>Телефоны (${phones.length})</b>`, '', ...phones.map(p => `• <code>${p}</code>`)].join('\n');
 }
 
 function formatOperatorsList() {
   const ops = listOperators();
-  if (!ops.length) return 'Operatorlar bo\'sh.';
+  if (!ops.length) return 'Операторы пусты.';
   return [
-    `<b>Operatorlar (${ops.length})</b>`,
+    `<b>Операторы (${ops.length})</b>`,
     '',
     ...ops.map(o =>
-      `• <b>${o.name}</b>${o.telegramId ? ` — <code>${o.telegramId}</code>` : ' — ID ulanmagan'}`,
+      `• <b>${o.name}</b>${o.telegramId ? ` — <code>${o.telegramId}</code>` : ' — ID не привязан'}`,
     ),
   ].join('\n');
 }
@@ -160,15 +179,17 @@ function formatOperatorsList() {
 function formatTagsCatalog() {
   const tags = listTags();
   return [
-    `<b>Teglar (${tags.length})</b>`,
+    `<b>Теги — действия клиента (${tags.length})</b>`,
     '',
     ...tags.map(t => `• <code>${t.id}</code> — ${t.label}${t.description ? `\n  <i>${t.description}</i>` : ''}`),
+    '',
+    '<i>Назначение тега требует фото-подтверждения.</i>',
   ].join('\n');
 }
 
 function formatAdminsList() {
   return [
-    `<b>Adminlar (${listAdmins().length})</b>`,
+    `<b>Админы (${listAdmins().length})</b>`,
     '',
     ...listAdmins().map(id => `• <code>${id}</code>${isEnvAdmin(id) ? ' (ENV)' : ''}`),
   ].join('\n');
@@ -201,13 +222,30 @@ function phoneDigits(phone) {
 
 function employeeActionsKeyboard(phone, telegramId) {
   const digits = phoneDigits(phone);
-  const rows = [[
-    { text: '🏷 Teglar', callback_data: `pick_tg:${digits}` },
-    { text: '👔 Operator', callback_data: `pick_op:${digits}` },
-  ]];
-  if (isAdmin(telegramId)) {
-    rows.push([{ text: '📊 Hisobot', callback_data: 'admin_export' }]);
+  return {
+    inline_keyboard: [
+      [
+        { text: '🏷 Теги + фото', callback_data: `pick_tg:${digits}` },
+        { text: '📎 Фото тегов', callback_data: `tag_photos:${digits}` },
+      ],
+      ...(isAdmin(telegramId) ? [[
+        { text: '👔 Оператор', callback_data: `pick_op:${digits}` },
+        { text: '📊 Экспорт', callback_data: 'admin_export' },
+      ]] : []),
+      [{ text: '◀️ Панель', callback_data: isAdmin(telegramId) ? 'adm_panel' : 'op_panel' }],
+    ],
+  };
+}
+
+function clientPickerKeyboard(employees, prefix) {
+  const rows = employees.slice(0, 40).map(e => [{
+    text: `${e.clientId || '—'} · ${e.fullName || e.phone}`,
+    callback_data: `${prefix}:${phoneDigits(e.phone)}`,
+  }]);
+  if (!rows.length) {
+    rows.push([{ text: '— пусто —', callback_data: 'noop' }]);
   }
+  rows.push([{ text: '◀️ Панель', callback_data: 'noop_panel' }]);
   return { inline_keyboard: rows };
 }
 
@@ -220,7 +258,7 @@ function operatorPickerKeyboard(phone) {
     if (ops[i + 1]) row.push({ text: ops[i + 1], callback_data: `op:${i + 1}:${digits}` });
     rows.push(row);
   }
-  rows.push([{ text: '✏️ Boshqa ism', callback_data: `op_c:${digits}` }]);
+  rows.push([{ text: '✏️ Другое имя', callback_data: `op_c:${digits}` }]);
   return { inline_keyboard: rows };
 }
 
@@ -228,12 +266,24 @@ function tagPickerKeyboard(phone, emp) {
   const digits = phoneDigits(phone);
   const tags = listTags();
   const rows = tags.map(t => {
-    const active = hasClientTag(emp, t.id);
-    return [{
-      text: `${active ? '✓ ' : ''}${t.label}`,
-      callback_data: `tg:${t.id}:${digits}`,
-    }];
+    const existing = getClientTag(emp, t.id);
+    const text = existing?.photo ? `📎 ${t.label}` : `➕ ${t.label}`;
+    const action = existing?.photo ? 'tag_view' : 'tag_pick';
+    return [{ text, callback_data: `${action}:${t.id}:${digits}` }];
   });
+  rows.push([{ text: '◀️ Назад', callback_data: `view_cl:${digits}` }]);
+  return { inline_keyboard: rows };
+}
+
+function tagPhotosKeyboard(phone, emp) {
+  const digits = phoneDigits(phone);
+  const tagged = (emp.tags || []).filter(t => t.photo?.path || t.photo?.fileId);
+  const rows = tagged.map(t => [{
+    text: `📎 ${t.label}`,
+    callback_data: `tag_view:${t.id}:${digits}`,
+  }]);
+  if (!rows.length) rows.push([{ text: '— нет фото —', callback_data: 'noop' }]);
+  rows.push([{ text: '◀️ Назад', callback_data: `view_cl:${digits}` }]);
   return { inline_keyboard: rows };
 }
 
@@ -241,21 +291,94 @@ async function sendExport(bot, chatId) {
   const buf = buildExcelBuffer();
   const res = await bot.sendDocument(chatId, buf, getExportFilename());
   if (!res.ok) {
-    await bot.sendMessage(chatId, `❌ ${res.description || 'Eksport xatosi'}`);
+    await bot.sendMessage(chatId, `❌ ${res.description || 'Ошибка экспорта'}`);
     return;
   }
   const note = isSheetsConfigured()
-    ? '\n\n📊 Google Sheets yangilandi (barcha operatorlar bo\'yicha ajratilgan).'
+    ? '\n\n📊 Google Sheets обновлён.'
     : '';
-  await bot.sendMessage(chatId, `✅ To\'liq hisobot yuborildi.${note}`);
+  await bot.sendMessage(chatId, `✅ Полный отчёт отправлен.${note}`);
+}
+
+function resolveClientQuery(query, telegramId) {
+  const q = String(query || '').trim();
+  let emp = null;
+  if (/^CLT-/i.test(q)) {
+    emp = findEmployeeByClientId(q);
+  } else {
+    emp = getEmployee(normalizePhone(q));
+  }
+  if (!emp?.phone) throw new Error('Клиент не найден');
+  if (!canViewClient(telegramId, emp)) throw new Error('Нет доступа к этому клиенту');
+  return emp;
 }
 
 function requireClientAccess(fromId, phone) {
   const emp = getEmployee(phone);
   if (!canManageClient(fromId, emp)) {
-    throw new Error('Ushbu lid uchun ruxsat yo\'q');
+    throw new Error('Нет доступа к этому клиенту');
   }
   return emp;
+}
+
+async function sendTagPhoto(bot, chatId, emp, tagId) {
+  const tag = getClientTag(emp, tagId);
+  if (!tag?.photo) throw new Error('Фото не найдено');
+
+  const caption = `${emp.clientId} · ${tag.label}\n${formatTagTime(tag.assignedAt)}`;
+
+  if (tag.photo.path) {
+    const abs = attachmentAbsolutePath(tag.photo.path);
+    const res = await bot.sendPhotoFile(chatId, abs, caption);
+    if (!res.ok) throw new Error(res.description || 'Не удалось отправить фото');
+    return;
+  }
+
+  if (tag.photo.fileId) {
+    const res = await bot.sendPhoto(chatId, tag.photo.fileId, { caption });
+    if (!res.ok) throw new Error(res.description || 'Не удалось отправить фото');
+  }
+}
+
+function extractFileId(msg) {
+  if (msg.photo?.length) return msg.photo[msg.photo.length - 1].file_id;
+  if (msg.document?.mime_type?.startsWith('image/')) return msg.document.file_id;
+  return null;
+}
+
+async function handleMediaMessage(bot, msg) {
+  const chatId = msg.chat.id;
+  const fromId = msg.from.id;
+  const pending = pendingTagPhoto.get(chatId);
+
+  if (!pending) return;
+  if (!hasStaffAccess(fromId)) {
+    pendingTagPhoto.delete(chatId);
+    return;
+  }
+
+  const fileId = extractFileId(msg);
+  if (!fileId) {
+    await bot.sendMessage(chatId, '❌ Отправьте фото (изображение).');
+    return;
+  }
+
+  try {
+    const emp = requireClientAccess(fromId, pending.phone);
+    const photo = await saveTelegramFile(bot, fileId, emp.clientId, pending.tagId);
+    const actor = getActor(fromId, msg.from.first_name);
+    const updated = addClientTag(pending.phone, pending.tagId, actor, photo);
+    pendingTagPhoto.delete(chatId);
+
+    await bot.sendMessage(chatId, [
+      `✅ Тег <b>${pending.tagLabel}</b> назначен`,
+      `Клиент: <code>${updated.clientId}</code>`,
+      '',
+      formatEmployee(updated),
+    ].join('\n'), { reply_markup: employeeActionsKeyboard(updated.phone, fromId) });
+  } catch (e) {
+    await bot.sendMessage(chatId, `❌ ${e.message}`);
+  }
 }
 
 async function handleCommand(bot, msg) {
@@ -264,13 +387,57 @@ async function handleCommand(bot, msg) {
   const fromId = msg.from.id;
   const actor = getActor(fromId, msg.from.first_name);
 
+  if (pendingTagPhoto.has(chatId) && !text.startsWith('/')) {
+    await bot.sendMessage(chatId, '📷 Ожидаю фото для тега. Отправьте изображение или /cancel');
+    return;
+  }
+
+  if (text === '/cancel') {
+    pendingCustomOperator.delete(chatId);
+    pendingAddClient.delete(chatId);
+    pendingFindClient.delete(chatId);
+    pendingTagPhoto.delete(chatId);
+    await bot.sendMessage(chatId, 'Отменено.', panelKeyboard(fromId));
+    return;
+  }
+
   if (pendingCustomOperator.has(chatId) && !text.startsWith('/')) {
     const phone = pendingCustomOperator.get(chatId);
     pendingCustomOperator.delete(chatId);
     try {
       requireClientAccess(fromId, phone);
       const emp = setEmployeeOperator(phone, text);
-      await bot.sendMessage(chatId, `✅ Operator: <b>${emp.operator}</b>\n\n${formatEmployee(emp)}`);
+      await bot.sendMessage(chatId, `✅ Оператор: <b>${emp.operator}</b>\n\n${formatEmployee(emp)}`);
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  if (pendingAddClient.has(chatId) && !text.startsWith('/')) {
+    pendingAddClient.delete(chatId);
+    if (!hasStaffAccess(fromId)) return;
+    try {
+      const phone = addPhone(text, actor);
+      const emp = getEmployee(phone);
+      await bot.sendMessage(chatId, [
+        `✅ Клиент добавлен`,
+        `ID: <code>${emp.clientId}</code>`,
+        `Телефон: <code>${phone}</code>`,
+      ].join('\n'), { reply_markup: employeeActionsKeyboard(phone, fromId) });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  if (pendingFindClient.has(chatId) && !text.startsWith('/')) {
+    pendingFindClient.delete(chatId);
+    try {
+      const emp = resolveClientQuery(text, fromId);
+      await bot.sendMessage(chatId, formatEmployee(emp), {
+        reply_markup: employeeActionsKeyboard(emp.phone, fromId),
+      });
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -281,26 +448,26 @@ async function handleCommand(bot, msg) {
     await bot.sendMessage(chatId, [
       '<b>Uztronix CRM</b>',
       '',
-      'Shaxsiy kabinet — Mini App.',
-      'Operatorlar — lidlar va teglar boshqaruvi.',
+      'Личный кабинет — Mini App.',
+      'Операторы и админы — панель управления.',
     ].join('\n'), { reply_markup: miniAppReplyKeyboard() });
     await bot.sendMessage(chatId, 'Mini App:', { reply_markup: miniAppInlineKeyboard() });
 
     if (isAdmin(fromId)) {
-      await bot.sendMessage(chatId, 'Admin paneli:', adminKeyboard());
+      await bot.sendMessage(chatId, '<b>Панель администратора</b>', adminKeyboard());
     } else if (hasStaffAccess(fromId)) {
-      await bot.sendMessage(chatId, 'Operator paneli:', operatorKeyboard());
+      await bot.sendMessage(chatId, '<b>Панель оператора</b>', operatorKeyboard());
     }
     return;
   }
 
   if (text === '/admin' && isAdmin(fromId)) {
-    await bot.sendMessage(chatId, '<b>Admin paneli</b>', adminKeyboard());
+    await bot.sendMessage(chatId, '<b>Панель администратора</b>', adminKeyboard());
     return;
   }
 
-  if (text === '/panel' && hasStaffAccess(fromId) && !isAdmin(fromId)) {
-    await bot.sendMessage(chatId, '<b>Operator paneli</b>', operatorKeyboard());
+  if ((text === '/panel' || text === '/operator') && hasStaffAccess(fromId) && !isAdmin(fromId)) {
+    await bot.sendMessage(chatId, '<b>Панель оператора</b>', operatorKeyboard());
     return;
   }
 
@@ -311,16 +478,16 @@ async function handleCommand(bot, msg) {
 
   if (cmd === '/help') {
     if (!hasStaffAccess(fromId)) {
-      await bot.sendMessage(chatId, '⛔ Ruxsat yo\'q.');
+      await bot.sendMessage(chatId, '⛔ Нет доступа.');
       return;
     }
-    await bot.sendMessage(chatId, isAdmin(fromId) ? adminHelpText() : operatorHelpText());
+    await bot.sendMessage(chatId, isAdmin(fromId) ? adminHelpText() : operatorHelpText(), panelKeyboard(fromId));
     return;
   }
 
   if (cmd === '/export') {
     if (!canExport(fromId)) {
-      await bot.sendMessage(chatId, '⛔ To\'liq hisobot faqat adminlarga.');
+      await bot.sendMessage(chatId, '⛔ Полный отчёт только для админов.');
       return;
     }
     await sendExport(bot, chatId);
@@ -328,27 +495,39 @@ async function handleCommand(bot, msg) {
   }
 
   if (!hasStaffAccess(fromId)) {
-    await bot.sendMessage(chatId, '⛔ Ruxsat yo\'q.');
+    await bot.sendMessage(chatId, '⛔ Нет доступа.');
+    return;
+  }
+
+  if (cmd === '/find' && parts[1]) {
+    try {
+      const emp = resolveClientQuery(parts.slice(1).join(' '), fromId);
+      await bot.sendMessage(chatId, formatEmployee(emp), {
+        reply_markup: employeeActionsKeyboard(emp.phone, fromId),
+      });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
     return;
   }
 
   if (cmd === '/list' || cmd === '/employees') {
-    await bot.sendMessage(chatId, formatEmployeesList(fromId));
+    await bot.sendMessage(chatId, formatEmployeesList(fromId), panelKeyboard(fromId));
     return;
   }
 
   if (cmd === '/listtags' || cmd === '/liststages') {
-    await bot.sendMessage(chatId, formatTagsCatalog());
+    await bot.sendMessage(chatId, formatTagsCatalog(), panelKeyboard(fromId));
     return;
   }
 
   if (isAdmin(fromId) && cmd === '/listadmins') {
-    await bot.sendMessage(chatId, formatAdminsList());
+    await bot.sendMessage(chatId, formatAdminsList(), adminKeyboard());
     return;
   }
 
   if (isAdmin(fromId) && cmd === '/listoperators') {
-    await bot.sendMessage(chatId, formatOperatorsList());
+    await bot.sendMessage(chatId, formatOperatorsList(), adminKeyboard());
     return;
   }
 
@@ -356,10 +535,11 @@ async function handleCommand(bot, msg) {
     try {
       if (cmd === '/add') {
         const phone = addPhone(parts[1], actor);
-        await bot.sendMessage(chatId, `✅ Qo\'shildi: <code>${phone}</code>`);
+        const emp = getEmployee(phone);
+        await bot.sendMessage(chatId, `✅ Добавлен: <code>${emp.clientId}</code> · <code>${phone}</code>`);
       } else {
         const phone = removePhone(parts[1]);
-        await bot.sendMessage(chatId, `✅ O\'chirildi: <code>${phone}</code>`);
+        await bot.sendMessage(chatId, `✅ Удалён: <code>${phone}</code>`);
       }
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
@@ -370,7 +550,12 @@ async function handleCommand(bot, msg) {
   if (!isAdmin(fromId) && cmd === '/add' && parts[1]) {
     try {
       const phone = addPhone(parts[1], actor);
-      await bot.sendMessage(chatId, `✅ Lid qo\'shildi: <code>${phone}</code>\nOperator: <b>${actor?.operatorName || actor?.name}</b>`);
+      const emp = getEmployee(phone);
+      await bot.sendMessage(chatId, [
+        `✅ Клиент добавлен`,
+        `ID: <code>${emp.clientId}</code>`,
+        `Телефон: <code>${phone}</code>`,
+      ].join('\n'), { reply_markup: employeeActionsKeyboard(phone, fromId) });
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -382,7 +567,7 @@ async function handleCommand(bot, msg) {
       const tid = /^\d+$/.test(parts[1]) ? parts[1] : null;
       const name = tid ? parts.slice(2).join(' ') : parts.slice(1).join(' ');
       const op = tid ? addOperator(name, tid) : addOperator(name);
-      await bot.sendMessage(chatId, `✅ Operator: <b>${op.name}</b>${op.telegramId ? ` (<code>${op.telegramId}</code>)` : ''}`);
+      await bot.sendMessage(chatId, `✅ Оператор: <b>${op.name}</b>${op.telegramId ? ` (<code>${op.telegramId}</code>)` : ''}`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -392,7 +577,7 @@ async function handleCommand(bot, msg) {
   if (isAdmin(fromId) && cmd === '/linkoperator' && parts[2]) {
     try {
       const op = linkOperator(parts[1], parts.slice(2).join(' '));
-      await bot.sendMessage(chatId, `✅ Bog\'landi: <b>${op.name}</b> → <code>${op.telegramId}</code>`);
+      await bot.sendMessage(chatId, `✅ Привязан: <b>${op.name}</b> → <code>${op.telegramId}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -402,7 +587,7 @@ async function handleCommand(bot, msg) {
   if (isAdmin(fromId) && cmd === '/removeoperator' && parts[1]) {
     try {
       removeOperator(parts.slice(1).join(' '));
-      await bot.sendMessage(chatId, '✅ Operator o\'chirildi');
+      await bot.sendMessage(chatId, '✅ Оператор удалён');
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -412,7 +597,7 @@ async function handleCommand(bot, msg) {
   if (canManageTagDefinitions(fromId) && (cmd === '/addtag' || cmd === '/addstage') && parts[1]) {
     try {
       const t = addTag(parts.slice(1).join(' '));
-      await bot.sendMessage(chatId, `✅ Teg: <b>${t.label}</b> (<code>${t.id}</code>)`);
+      await bot.sendMessage(chatId, `✅ Тег: <b>${t.label}</b> (<code>${t.id}</code>)`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -422,7 +607,7 @@ async function handleCommand(bot, msg) {
   if (isAdmin(fromId) && (cmd === '/removetag' || cmd === '/removestage') && parts[1]) {
     try {
       removeTag(parts[1]);
-      await bot.sendMessage(chatId, `✅ Teg o\'chirildi: <code>${parts[1]}</code>`);
+      await bot.sendMessage(chatId, `✅ Тег удалён: <code>${parts[1]}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -431,7 +616,7 @@ async function handleCommand(bot, msg) {
 
   if (isAdmin(fromId) && cmd === '/addadmin' && parts[1]) {
     try {
-      await bot.sendMessage(chatId, `✅ Admin: <code>${addAdmin(parts[1])}</code>`);
+      await bot.sendMessage(chatId, `✅ Админ: <code>${addAdmin(parts[1])}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -440,7 +625,7 @@ async function handleCommand(bot, msg) {
 
   if (isAdmin(fromId) && cmd === '/removeadmin' && parts[1]) {
     try {
-      await bot.sendMessage(chatId, `✅ O\'chirildi: <code>${removeAdmin(parts[1])}</code>`);
+      await bot.sendMessage(chatId, `✅ Удалён: <code>${removeAdmin(parts[1])}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -449,7 +634,7 @@ async function handleCommand(bot, msg) {
 
   if (cmd === '/employee' && parts[1]) {
     try {
-      const emp = requireClientAccess(fromId, parts[1]);
+      const emp = resolveClientQuery(parts[1], fromId);
       await bot.sendMessage(chatId, formatEmployee(emp), {
         reply_markup: employeeActionsKeyboard(emp.phone, fromId),
       });
@@ -459,10 +644,10 @@ async function handleCommand(bot, msg) {
     return;
   }
 
-  if (cmd === '/picktags' || cmd === '/pickstage') && parts[1]) {
+  if ((cmd === '/picktags' || cmd === '/pickstage') && parts[1]) {
     try {
       const emp = requireClientAccess(fromId, parts[1]);
-      await bot.sendMessage(chatId, `Teglar — <code>${emp.phone}</code>\n(bir nechta tanlash mumkin):`, {
+      await bot.sendMessage(chatId, `Теги — <code>${emp.clientId}</code>\n(нужно фото-подтверждение):`, {
         reply_markup: tagPickerKeyboard(emp.phone, emp),
       });
     } catch (e) {
@@ -473,20 +658,22 @@ async function handleCommand(bot, msg) {
 
   if (cmd === '/tag' && parts[2]) {
     try {
-      requireClientAccess(fromId, parts[1]);
-      const emp = addClientTag(parts[1], parts[2], actor);
-      await bot.sendMessage(chatId, `✅ Teg qo\'shildi\n\n${formatEmployee(emp)}`);
+      const emp = requireClientAccess(fromId, parts[1]);
+      const tag = listTags().find(t => t.id === parts[2]);
+      if (!tag) throw new Error('Неизвестный тег');
+      pendingTagPhoto.set(chatId, { phone: emp.phone, tagId: tag.id, tagLabel: tag.label });
+      await bot.sendMessage(chatId, `📷 Отправьте фото для тега <b>${tag.label}</b>\nКлиент: <code>${emp.clientId}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
     return;
   }
 
-  if (cmd === '/untag' && parts[2]) {
+  if (cmd === '/untag' && parts[2] && isAdmin(fromId)) {
     try {
-      requireClientAccess(fromId, parts[1]);
-      const emp = removeClientTag(parts[1], parts[2], actor);
-      await bot.sendMessage(chatId, `✅ Teg olib tashlandi\n\n${formatEmployee(emp)}`);
+      const emp = requireClientAccess(fromId, parts[1]);
+      const updated = removeClientTag(parts[1], parts[2], actor);
+      await bot.sendMessage(chatId, `✅ Тег снят\n\n${formatEmployee(updated)}`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -495,8 +682,8 @@ async function handleCommand(bot, msg) {
 
   if (cmd === '/pickoperator' && parts[1] && isAdmin(fromId)) {
     const phone = normalizePhone(parts[1]);
-    if (!phone) return bot.sendMessage(chatId, '❌ Noto\'g\'ri telefon');
-    await bot.sendMessage(chatId, `Operator — <code>${phone}</code>:`, {
+    if (!phone) return bot.sendMessage(chatId, '❌ Неверный телефон');
+    await bot.sendMessage(chatId, `Оператор — <code>${phone}</code>:`, {
       reply_markup: operatorPickerKeyboard(phone),
     });
     return;
@@ -506,7 +693,9 @@ async function handleCommand(bot, msg) {
     try {
       requireClientAccess(fromId, parts[1]);
       const emp = setEmployeeField(parts[1], parts[2], parts.slice(3).join(' '));
-      await bot.sendMessage(chatId, `✅ Yangilandi\n\n${formatEmployee(emp)}`);
+      await bot.sendMessage(chatId, `✅ Обновлено\n\n${formatEmployee(emp)}`, {
+        reply_markup: employeeActionsKeyboard(emp.phone, fromId),
+      });
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -516,7 +705,7 @@ async function handleCommand(bot, msg) {
   if (isAdmin(fromId) && cmd === '/addcard' && parts[2]) {
     try {
       const card = addEmployeeCard(parts[1], parts[2]);
-      await bot.sendMessage(chatId, `✅ Karta: <code>${maskCard(card)}</code>`);
+      await bot.sendMessage(chatId, `✅ Карта: <code>${maskCard(card)}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -526,14 +715,14 @@ async function handleCommand(bot, msg) {
   if (isAdmin(fromId) && cmd === '/removecard' && parts[2]) {
     try {
       const card = removeEmployeeCard(parts[1], parts[2]);
-      await bot.sendMessage(chatId, `✅ O\'chirildi: <code>${maskCard(card)}</code>`);
+      await bot.sendMessage(chatId, `✅ Удалена: <code>${maskCard(card)}</code>`);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
     return;
   }
 
-  await bot.sendMessage(chatId, 'Noma\'lum buyruq. /help');
+  await bot.sendMessage(chatId, 'Неизвестная команда. /help', panelKeyboard(fromId));
 }
 
 async function handleCallback(bot, query) {
@@ -541,40 +730,72 @@ async function handleCallback(bot, query) {
   const messageId = query.message?.message_id;
   const fromId = query.from?.id;
   const data = query.data || '';
-  const actor = getActor(fromId, query.from?.first_name);
+
+  if (data === 'noop') {
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+
+  if (data === 'noop_panel') {
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, isAdmin(fromId) ? '<b>Панель администратора</b>' : '<b>Панель оператора</b>', panelKeyboard(fromId));
+    return;
+  }
+
+  if (data === 'adm_panel' && isAdmin(fromId)) {
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageText(chatId, messageId, '<b>Панель администратора</b>', adminKeyboard());
+    return;
+  }
+
+  if (data === 'op_panel' && hasStaffAccess(fromId) && !isAdmin(fromId)) {
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageText(chatId, messageId, '<b>Панель оператора</b>', operatorKeyboard());
+    return;
+  }
 
   if (data === 'admin_export') {
     if (!canExport(fromId)) {
-      await bot.answerCallbackQuery(query.id, 'Faqat admin');
+      await bot.answerCallbackQuery(query.id, 'Только админ');
       return;
     }
-    await bot.answerCallbackQuery(query.id, 'Tayyorlanmoqda...');
+    await bot.answerCallbackQuery(query.id, 'Готовлю...');
     await sendExport(bot, chatId);
     return;
   }
 
-  if (!hasStaffAccess(fromId) && !data.startsWith('admin_')) {
-    await bot.answerCallbackQuery(query.id, 'Ruxsat yo\'q');
+  if (!hasStaffAccess(fromId) && !data.startsWith('admin_') && !data.startsWith('adm_') && !data.startsWith('op_')) {
+    await bot.answerCallbackQuery(query.id, 'Нет доступа');
+    return;
+  }
+
+  if (data === 'adm_clients' && isAdmin(fromId)) {
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), adminKeyboard());
+    return;
+  }
+
+  if (data === 'op_clients') {
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), operatorKeyboard());
     return;
   }
 
   if (data === 'op_my_leads' || data === 'admin_employees') {
     await bot.answerCallbackQuery(query.id);
-    const kb = isAdmin(fromId) ? adminKeyboard() : operatorKeyboard();
-    await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), kb);
+    await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), panelKeyboard(fromId));
     return;
   }
 
   if (data === 'admin_list' && isAdmin(fromId)) {
     await bot.answerCallbackQuery(query.id);
-    await bot.editMessageText(chatId, messageId, formatPhoneList(fromId), adminKeyboard());
+    await bot.editMessageText(chatId, messageId, formatPhoneList(), adminKeyboard());
     return;
   }
 
   if (data === 'admin_tags') {
     await bot.answerCallbackQuery(query.id);
-    const kb = isAdmin(fromId) ? adminKeyboard() : operatorKeyboard();
-    await bot.editMessageText(chatId, messageId, formatTagsCatalog(), kb);
+    await bot.editMessageText(chatId, messageId, formatTagsCatalog(), panelKeyboard(fromId));
     return;
   }
 
@@ -602,9 +823,84 @@ async function handleCallback(bot, query) {
     return;
   }
 
+  if (data === 'adm_add' && isAdmin(fromId)) {
+    pendingAddClient.set(chatId, true);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Введите телефон нового лида:\n<code>+998901234567</code>\n\n/cancel — отмена');
+    return;
+  }
+
+  if (data === 'op_add') {
+    pendingAddClient.set(chatId, true);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Введите телефон нового клиента:\n<code>+998901234567</code>\n\n/cancel — отмена');
+    return;
+  }
+
+  if (data === 'adm_find' && isAdmin(fromId)) {
+    pendingFindClient.set(chatId, true);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Поиск: <code>CLT-000001</code> или <code>+998...</code>\n\n/cancel — отмена');
+    return;
+  }
+
+  if (data === 'op_find') {
+    pendingFindClient.set(chatId, true);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Поиск: <code>CLT-000001</code> или <code>+998...</code>\n\n/cancel — отмена');
+    return;
+  }
+
+  if (data === 'adm_tag_menu' && isAdmin(fromId)) {
+    const employees = listEmployeesForUser(fromId);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Выберите клиента для назначения тега:', {
+      reply_markup: clientPickerKeyboard(employees, 'tag_cl'),
+    });
+    return;
+  }
+
+  if (data === 'op_tag_menu') {
+    const employees = listEmployeesForUser(fromId);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Выберите клиента для назначения тега:', {
+      reply_markup: clientPickerKeyboard(employees, 'tag_cl'),
+    });
+    return;
+  }
+
   if (data === 'admin_add_hint') {
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Lid qo\'shish:\n<code>/add +998901234567</code>');
+    pendingAddClient.set(chatId, true);
+    await bot.sendMessage(chatId, 'Введите телефон:\n<code>+998901234567</code>');
+    return;
+  }
+
+  if (data.startsWith('tag_cl:')) {
+    const phone = `+${data.slice(7)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, `Теги — <code>${emp.clientId}</code>:`, {
+        reply_markup: tagPickerKeyboard(phone, emp),
+      });
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('view_cl:')) {
+    const phone = `+${data.slice(8)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, formatEmployee(emp), {
+        reply_markup: employeeActionsKeyboard(phone, fromId),
+      });
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
     return;
   }
 
@@ -613,8 +909,22 @@ async function handleCallback(bot, query) {
     try {
       const emp = requireClientAccess(fromId, phone);
       await bot.answerCallbackQuery(query.id);
-      await bot.sendMessage(chatId, `Teglar — <code>${phone}</code>:`, {
+      await bot.sendMessage(chatId, `Теги — <code>${emp.clientId}</code>:`, {
         reply_markup: tagPickerKeyboard(phone, emp),
+      });
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('tag_photos:')) {
+    const phone = `+${data.slice(11)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, `Фото тегов — <code>${emp.clientId}</code>:`, {
+        reply_markup: tagPhotosKeyboard(phone, emp),
       });
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
@@ -625,23 +935,45 @@ async function handleCallback(bot, query) {
   if (data.startsWith('pick_op:') && isAdmin(fromId)) {
     const phone = `+${data.slice(8)}`;
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, `Operator — <code>${phone}</code>:`, {
+    await bot.sendMessage(chatId, `Оператор — <code>${phone}</code>:`, {
       reply_markup: operatorPickerKeyboard(phone),
     });
     return;
   }
 
-  if (data.startsWith('tg:')) {
-    const rest = data.slice(3);
+  if (data.startsWith('tag_pick:')) {
+    const rest = data.slice(9);
     const lastColon = rest.lastIndexOf(':');
     const tagId = rest.slice(0, lastColon);
     const phone = `+${rest.slice(lastColon + 1)}`;
     try {
-      requireClientAccess(fromId, phone);
-      const emp = toggleClientTag(phone, tagId, actor);
-      const active = hasClientTag(emp, tagId);
-      await bot.answerCallbackQuery(query.id, active ? 'Qo\'shildi' : 'Olib tashlandi');
-      await bot.editMessageReplyMarkup(chatId, messageId, tagPickerKeyboard(phone, emp));
+      const emp = requireClientAccess(fromId, phone);
+      const tag = listTags().find(t => t.id === tagId);
+      if (!tag) throw new Error('Тег не найден');
+      pendingTagPhoto.set(chatId, { phone, tagId, tagLabel: tag.label });
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, [
+        `📷 Отправьте фото для тега <b>${tag.label}</b>`,
+        `Клиент: <code>${emp.clientId}</code>`,
+        '',
+        '<i>Например: фото паспорта или подписанного договора</i>',
+        '/cancel — отмена',
+      ].join('\n'));
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('tag_view:')) {
+    const rest = data.slice(9);
+    const lastColon = rest.lastIndexOf(':');
+    const tagId = rest.slice(0, lastColon);
+    const phone = `+${rest.slice(lastColon + 1)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id, 'Отправляю...');
+      await sendTagPhoto(bot, chatId, emp, tagId);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
@@ -652,7 +984,7 @@ async function handleCallback(bot, query) {
     const phone = `+${data.slice(5)}`;
     pendingCustomOperator.set(chatId, phone);
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, `Operator ismi (<code>${phone}</code>):`);
+    await bot.sendMessage(chatId, `Имя оператора (<code>${phone}</code>):`);
     return;
   }
 
@@ -662,14 +994,14 @@ async function handleCallback(bot, query) {
     const name = names[Number(idxStr)];
     const phone = `+${digits}`;
     if (!name) {
-      await bot.answerCallbackQuery(query.id, 'Xato');
+      await bot.answerCallbackQuery(query.id, 'Ошибка');
       return;
     }
     try {
       const op = listOperators().find(o => o.name === name);
       const emp = setEmployeeOperator(phone, name, op?.id || '');
       await bot.answerCallbackQuery(query.id, name);
-      await bot.sendMessage(chatId, `✅ Yangilandi\n\n${formatEmployee(emp)}`);
+      await bot.sendMessage(chatId, `✅ Обновлено\n\n${formatEmployee(emp)}`);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
@@ -696,7 +1028,13 @@ export function startBot(token) {
         if (res.ok && res.result?.length) {
           for (const update of res.result) {
             offset = update.update_id + 1;
-            if (update.message) await handleCommand(bot, update.message);
+            if (update.message) {
+              if (update.message.photo || update.message.document) {
+                await handleMediaMessage(bot, update.message);
+              } else {
+                await handleCommand(bot, update.message);
+              }
+            }
             if (update.callback_query) await handleCallback(bot, update.callback_query);
           }
         }

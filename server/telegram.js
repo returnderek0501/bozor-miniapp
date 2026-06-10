@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
 
 export function validateInitData(initData, botToken) {
   if (!initData || !botToken) return null;
@@ -72,6 +74,29 @@ export function createBotApi(token) {
       }), filename);
       const res = await fetch(`${base}/sendDocument`, { method: 'POST', body: form });
       return res.json();
+    },
+
+    getFile: (fileId) => call('getFile', { file_id: fileId }),
+
+    sendPhoto: (chatId, photo, extra = {}) =>
+      call('sendPhoto', { chat_id: chatId, photo, ...extra }),
+
+    sendPhotoFile: async (chatId, absolutePath, caption = '') => {
+      const { readFileSync } = await import('fs');
+      const form = new FormData();
+      form.append('chat_id', String(chatId));
+      form.append('photo', new Blob([readFileSync(absolutePath)]), 'photo.jpg');
+      if (caption) form.append('caption', caption);
+      const res = await fetch(`${base}/sendPhoto`, { method: 'POST', body: form });
+      return res.json();
+    },
+
+    downloadFile: async (remotePath, absolutePath) => {
+      const url = `https://api.telegram.org/file/bot${token}/${remotePath}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Fayl yuklab olinmadi');
+      const fileStream = createWriteStream(absolutePath);
+      await pipeline(res.body, fileStream);
     },
   };
 }

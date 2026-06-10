@@ -7,6 +7,9 @@ data/employees.json
 data/operators.json
 data/stages.json
 data/tags.json
+data/client_counter.json
+data/attachments/
+attachments/
 data/admins.json
 data/*.xlsx
 data/uztronix_export.xlsx

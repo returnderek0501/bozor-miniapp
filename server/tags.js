@@ -6,9 +6,11 @@ const TAGS_FILE = join(DATA_DIR, 'tags.json');
 const LEGACY_FILE = join(DATA_DIR, 'stages.json');
 
 const DEFAULT_TAGS = [
+  { id: 'pasport', label: 'Паспорт получен', description: 'Клиент прислал фото паспорта' },
+  { id: 'dogovor', label: 'Договор подписан', description: 'Клиент подписал договор' },
   { id: 'v_rabote', label: 'В работе', description: 'Клиент в активной работе' },
-  { id: 'ozhidanie', label: 'Ожидание', description: 'Клиент в работе, ожидает переход на следующий этап' },
-  { id: 'ignor', label: 'Игнор', description: 'Клиент игнорирует' },
+  { id: 'ozhidanie', label: 'Ожидание', description: 'Ожидание действия от клиента' },
+  { id: 'ignor', label: 'Игнор', description: 'Клиент не отвечает' },
 ];
 
 function loadTagsFile() {

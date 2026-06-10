@@ -29,13 +29,12 @@ export function canExport(telegramId) {
 
 export function canManageClient(telegramId, emp) {
   if (isAdmin(telegramId)) return true;
-  const op = getOperatorByTelegramId(telegramId);
-  if (!op) return false;
-  return (
-    emp.operator === op.name
-    || emp.operatorId === op.id
-    || emp.createdBy === Number(telegramId)
-  );
+  if (!emp) return false;
+  return emp.createdBy === Number(telegramId);
+}
+
+export function canViewClient(telegramId, emp) {
+  return canManageClient(telegramId, emp);
 }
 
 export function canManageTagDefinitions(telegramId) {

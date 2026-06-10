@@ -4,7 +4,7 @@ import {
 } from './dataPath.js';
 import { getTag } from './tags.js';
 import { isAdmin } from './admins.js';
-import { getOperatorByTelegramId } from './operators.js';
+import { assignClientIdIfMissing } from './clientIds.js';
 
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
 const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
@@ -33,6 +33,7 @@ export function normalizeCard(raw) {
 function defaultEmployee(phone) {
   return {
     phone,
+    clientId: '',
     fullName: '',
     position: '',
     department: '',
@@ -74,6 +75,7 @@ function migrateEmployee(emp) {
   }
   if (!emp.tags) emp.tags = [];
   if (!emp.tagHistory) emp.tagHistory = [];
+  if (!emp.clientId) assignClientIdIfMissing(emp);
   return emp;
 }
 
@@ -100,6 +102,7 @@ export function addPhone(raw, actor = null) {
     const all = readEmployees();
     const e = migrateEmployee(all[phone] || emp);
     const now = new Date().toISOString();
+    assignClientIdIfMissing(e);
     e.createdAt = now;
     e.createdBy = actor.id;
     e.createdByName = actor.name;
@@ -111,7 +114,11 @@ export function addPhone(raw, actor = null) {
     all[phone] = e;
     writeEmployees(all);
   } else if (isNew) {
-    triggerSync();
+    const all = readEmployees();
+    const e = migrateEmployee(all[phone] || defaultEmployee(phone));
+    assignClientIdIfMissing(e);
+    all[phone] = e;
+    writeEmployees(all);
   }
   return phone;
 }
@@ -182,13 +189,13 @@ export function listEmployees() {
 export function listEmployeesForUser(telegramId) {
   const all = listEmployees();
   if (isAdmin(telegramId)) return all;
-  const op = getOperatorByTelegramId(telegramId);
-  if (!op) return [];
-  return all.filter(e =>
-    e.operator === op.name
-    || e.operatorId === op.id
-    || e.createdBy === Number(telegramId),
-  );
+  return all.filter(e => e.createdBy === Number(telegramId));
+}
+
+export function findEmployeeByClientId(clientId) {
+  const key = String(clientId || '').trim().toUpperCase();
+  if (!key) return null;
+  return listEmployees().find(e => e.clientId?.toUpperCase() === key) || null;
 }
 
 const EMPLOYEE_FIELDS = {
@@ -244,30 +251,31 @@ function pushTagHistory(emp, entry) {
   emp.tagHistory.push(entry);
 }
 
-export function addClientTag(rawPhone, tagId, actor) {
+export function addClientTag(rawPhone, tagId, actor, photo = null) {
   const phone = normalizePhone(rawPhone);
   const tag = getTag(tagId);
   if (!phone) throw new Error('Noto\'g\'ri telefon');
   if (!tag) throw new Error(`Noma\'lum teg: ${tagId}`);
+  if (!photo?.fileId) throw new Error('Teg uchun tasdiqlovchi foto yuborish shart');
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  assignClientIdIfMissing(emp);
   const now = new Date().toISOString();
   const existing = emp.tags.find(t => t.id === tagId);
+  const tagEntry = {
+    id: tagId,
+    label: tag.label,
+    assignedAt: now,
+    assignedBy: actor?.id ?? null,
+    assignedByName: actor?.name || '',
+    photo,
+  };
 
   if (existing) {
-    existing.assignedAt = now;
-    existing.assignedBy = actor?.id ?? null;
-    existing.assignedByName = actor?.name || '';
-    existing.label = tag.label;
+    Object.assign(existing, tagEntry);
   } else {
-    emp.tags.push({
-      id: tagId,
-      label: tag.label,
-      assignedAt: now,
-      assignedBy: actor?.id ?? null,
-      assignedByName: actor?.name || '',
-    });
+    emp.tags.push(tagEntry);
   }
 
   pushTagHistory(emp, {
@@ -277,6 +285,7 @@ export function addClientTag(rawPhone, tagId, actor) {
     at: now,
     by: actor?.id ?? null,
     byName: actor?.name || '',
+    photo,
   });
 
   emp.updatedAt = now;
@@ -311,10 +320,8 @@ export function removeClientTag(rawPhone, tagId, actor) {
   return emp;
 }
 
-export function toggleClientTag(rawPhone, tagId, actor) {
-  const emp = getEmployee(rawPhone);
-  const has = emp.tags.some(t => t.id === tagId);
-  return has ? removeClientTag(rawPhone, tagId, actor) : addClientTag(rawPhone, tagId, actor);
+export function getClientTag(emp, tagId) {
+  return (emp.tags || []).find(t => t.id === tagId) || null;
 }
 
 export function hasClientTag(emp, tagId) {
