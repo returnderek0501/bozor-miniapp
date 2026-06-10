@@ -19,7 +19,17 @@ export const HEADERS_MAIN = [
   'Карты',
   'Создан',
   'Обновлён',
-  'Создал',
+  'Внёс в систему',
+];
+
+export const HEADERS_PHOTOS = [
+  'ID клиента',
+  'Телефон',
+  'ФИО',
+  'Оператор',
+  'Тег',
+  'Время',
+  'Файл',
 ];
 
 export const HEADERS_TAG_HISTORY = [
@@ -74,7 +84,7 @@ export function tagHistoryRows(employees) {
         emp.fullName || '',
         emp.operator || '',
         h.label || h.id,
-        h.action === 'remove' ? 'Снят' : 'Добавлен',
+        h.action === 'remove' ? 'Снят' : h.action === 'photo' ? 'Фото' : 'Добавлен',
         formatTagTime(h.at),
         h.byName || (h.by ? String(h.by) : ''),
         h.photo?.path ? 'да' : '—',
@@ -82,6 +92,25 @@ export function tagHistoryRows(employees) {
     }
   }
   return rows.sort((a, b) => String(b[6]).localeCompare(String(a[6])));
+}
+
+export function photoRows(employees) {
+  const rows = [];
+  for (const emp of employees) {
+    for (const t of emp.tags || []) {
+      if (!t.photo?.path && !t.photo?.fileId) continue;
+      rows.push([
+        emp.clientId || '',
+        emp.phone,
+        emp.fullName || '',
+        emp.operator || '',
+        t.label || t.id,
+        formatTagTime(t.assignedAt),
+        t.photo?.path || 'telegram',
+      ]);
+    }
+  }
+  return rows.sort((a, b) => String(b[5]).localeCompare(String(a[5])));
 }
 
 export function groupByOperator(employees) {

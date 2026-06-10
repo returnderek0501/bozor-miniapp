@@ -4,6 +4,7 @@ import {
 } from './dataPath.js';
 import { getTag } from './tags.js';
 import { isAdmin } from './admins.js';
+import { getOperatorByTelegramId } from './operators.js';
 import { assignClientIdIfMissing } from './clientIds.js';
 
 const PHONES_FILE = join(DATA_DIR, 'phones.json');
@@ -189,7 +190,9 @@ export function listEmployees() {
 export function listEmployeesForUser(telegramId) {
   const all = listEmployees();
   if (isAdmin(telegramId)) return all;
-  return all.filter(e => e.createdBy === Number(telegramId));
+  const op = getOperatorByTelegramId(telegramId);
+  if (!op) return [];
+  return all.filter(e => e.operatorId === op.id || e.operator === op.name);
 }
 
 export function findEmployeeByClientId(clientId) {
@@ -256,42 +259,54 @@ export function addClientTag(rawPhone, tagId, actor, photo = null) {
   const tag = getTag(tagId);
   if (!phone) throw new Error('Noto\'g\'ri telefon');
   if (!tag) throw new Error(`Noma\'lum teg: ${tagId}`);
-  if (!photo?.fileId) throw new Error('Teg uchun tasdiqlovchi foto yuborish shart');
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   assignClientIdIfMissing(emp);
   const now = new Date().toISOString();
   const existing = emp.tags.find(t => t.id === tagId);
-  const tagEntry = {
-    id: tagId,
-    label: tag.label,
-    assignedAt: now,
-    assignedBy: actor?.id ?? null,
-    assignedByName: actor?.name || '',
-    photo,
-  };
 
   if (existing) {
-    Object.assign(existing, tagEntry);
+    existing.label = tag.label;
+    existing.assignedAt = now;
+    existing.assignedBy = actor?.id ?? null;
+    existing.assignedByName = actor?.name || '';
+    if (photo) existing.photo = photo;
   } else {
-    emp.tags.push(tagEntry);
+    const entry = {
+      id: tagId,
+      label: tag.label,
+      assignedAt: now,
+      assignedBy: actor?.id ?? null,
+      assignedByName: actor?.name || '',
+    };
+    if (photo) entry.photo = photo;
+    emp.tags.push(entry);
   }
 
-  pushTagHistory(emp, {
+  const historyEntry = {
     id: tagId,
     label: tag.label,
-    action: 'add',
+    action: photo ? 'photo' : 'add',
     at: now,
     by: actor?.id ?? null,
     byName: actor?.name || '',
-    photo,
-  });
+  };
+  if (photo) historyEntry.photo = photo;
+  pushTagHistory(emp, historyEntry);
 
   emp.updatedAt = now;
   all[phone] = emp;
   writeEmployees(all);
   return emp;
+}
+
+export function attachClientTagPhoto(rawPhone, tagId, actor, photo) {
+  if (!photo?.fileId) throw new Error('Foto yuborilmagan');
+  const emp = getEmployee(rawPhone);
+  const hasTag = emp.tags?.some(t => t.id === tagId);
+  if (!hasTag) return addClientTag(rawPhone, tagId, actor, photo);
+  return addClientTag(rawPhone, tagId, actor, photo);
 }
 
 export function removeClientTag(rawPhone, tagId, actor) {

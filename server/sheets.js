@@ -3,8 +3,10 @@ import { listEmployees } from './store.js';
 import {
   HEADERS_MAIN,
   HEADERS_TAG_HISTORY,
+  HEADERS_PHOTOS,
   rowsFromEmployees,
   tagHistoryRows,
+  photoRows,
   groupByOperator,
   sanitizeSheetName,
 } from './exportData.js';
@@ -71,6 +73,7 @@ export async function syncToGoogleSheets() {
 
   await writeSheet(spreadsheetId, 'Все лиды', HEADERS_MAIN, rowsFromEmployees(employees));
   await writeSheet(spreadsheetId, 'История тегов', HEADERS_TAG_HISTORY, tagHistoryRows(employees));
+  await writeSheet(spreadsheetId, 'Фото', HEADERS_PHOTOS, photoRows(employees));
 
   for (const [operator, emps] of groupByOperator(employees)) {
     await writeSheet(

@@ -6,8 +6,10 @@ import { listEmployees } from './store.js';
 import {
   HEADERS_MAIN,
   HEADERS_TAG_HISTORY,
+  HEADERS_PHOTOS,
   rowsFromEmployees,
   tagHistoryRows,
+  photoRows,
   groupByOperator,
   sanitizeSheetName,
 } from './exportData.js';
@@ -20,6 +22,7 @@ export function buildWorkbookData() {
   const sheets = [
     { name: 'Все лиды', headers: HEADERS_MAIN, rows: rowsFromEmployees(employees) },
     { name: 'История тегов', headers: HEADERS_TAG_HISTORY, rows: tagHistoryRows(employees) },
+    { name: 'Фото', headers: HEADERS_PHOTOS, rows: photoRows(employees) },
   ];
 
   for (const [operator, emps] of groupByOperator(employees)) {
