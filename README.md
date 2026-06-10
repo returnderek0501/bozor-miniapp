@@ -71,6 +71,7 @@ npm start
 - `/set +998901234567 tenure 3 yil 6 oy`
 - `/set +998901234567 balance 2500000`
 - `/set +998901234567 id UZT-042`
+- `/set +998901234567 operator Имя` / `/set +998901234567 stage v_rabote`
 - `/employee +998901234567` — просмотр профиля
 - `/employees` — список всех
 
