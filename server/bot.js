@@ -7,7 +7,7 @@ import {
   listTelegramIdsForPhones, getTelegramIdByPhone,
 } from './store.js';
 import { isAdmin, listAdmins, addAdmin, isEnvAdmin } from './admins.js';
-import { listOperators, addOperator } from './operators.js';
+import { listOperators, addOperatorByTelegramId } from './operators.js';
 import { listTags, listTagsForUser, addTag, formatTagTime, GLOBAL_TAG_COUNT } from './tags.js';
 import {
   getActor, hasStaffAccess, canExport, canManageClient, canViewClient,
@@ -111,7 +111,7 @@ function operatorKeyboard() {
 
 function staffOpsKeyboard() {
   return ik([
-    [{ text: '➕ Добавить оператора', callback_data: 'staff_add_op' }],
+    [{ text: '➕ Добавить по Telegram ID', callback_data: 'staff_add_op' }],
     [{ text: '📋 Список', callback_data: 'admin_operators' }],
     [{ text: '◀️ Панель', callback_data: 'noop_panel' }],
   ]);
@@ -308,10 +308,13 @@ function formatOperatorsList() {
   const ops = listOperators();
   if (!ops.length) return 'Операторы пусты.';
   return [
-    `<b>Операторы (${ops.length})</b>`,
+    `<b>Аккаунты операторов (${ops.length})</b>`,
+    '<i>Имя на смене каждый задаёт сам: 👤 Кто я / сменить</i>',
     '',
     ...ops.map(o =>
-      `• <b>${o.name}</b>${o.telegramId ? ` — <code>${o.telegramId}</code>` : ' — Telegram не привязан'}`,
+      o.telegramId
+        ? `• <code>${o.telegramId}</code>`
+        : `• <b>${o.name}</b> — Telegram не привязан`,
     ),
   ].join('\n');
 }
@@ -629,19 +632,14 @@ async function handlePendingText(bot, msg) {
 
   if (pending.addStaff.has(chatId) && isAdmin(fromId)) {
     const p = pending.addStaff.get(chatId);
-    if (p.step === 'name') {
-      p.name = text;
-      p.step = 'tg';
-      pending.addStaff.set(chatId, p);
-      await bot.sendMessage(chatId, 'Telegram ID оператора (число) или /skip');
-      return true;
-    }
-    if (p.step === 'tg' && p.type === 'operator') {
+    if (p.step === 'id' && p.type === 'operator') {
       pending.addStaff.delete(chatId);
       try {
-        const tid = /^\d+$/.test(text) ? text : null;
-        const op = tid ? addOperator(p.name, tid) : addOperator(p.name);
-        await bot.sendMessage(chatId, `✅ Оператор: <b>${op.name}</b>${op.telegramId ? ` (<code>${op.telegramId}</code>)` : ''}`, staffOpsKeyboard());
+        const op = addOperatorByTelegramId(text);
+        await bot.sendMessage(chatId, [
+          `✅ Доступ выдан: <code>${op.telegramId}</code>`,
+          'Имя на смене оператор выберет сам: <b>👤 Кто я / сменить</b>',
+        ].join('\n'), staffOpsKeyboard());
       } catch (e) {
         await bot.sendMessage(chatId, `❌ ${e.message}`);
       }
@@ -683,19 +681,6 @@ async function handleCommand(bot, msg) {
     return;
   }
 
-  if (matchCmd(text, '/skip') && pending.addStaff.has(chatId)) {
-    const p = pending.addStaff.get(chatId);
-    if (p.type === 'operator' && p.step === 'tg' && p.name) {
-      pending.addStaff.delete(chatId);
-      try {
-        const op = addOperator(p.name);
-        await bot.sendMessage(chatId, `✅ Оператор: <b>${op.name}</b> (без Telegram ID)`, staffOpsKeyboard());
-      } catch (e) {
-        await bot.sendMessage(chatId, `❌ ${e.message}`);
-      }
-    }
-    return;
-  }
 
   if (!text.startsWith('/') && await handlePendingText(bot, msg)) return;
 
@@ -915,9 +900,13 @@ async function handleCallback(bot, query) {
   }
 
   if (data === 'staff_add_op' && isAdmin(fromId)) {
-    pending.addStaff.set(chatId, { type: 'operator', step: 'name' });
+    pending.addStaff.set(chatId, { type: 'operator', step: 'id' });
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Имя оператора:\n/cancel — отмена');
+    await bot.sendMessage(chatId, [
+      'Telegram ID аккаунта оператора (число):',
+      'Имя на смене он задаст сам в панели.',
+      '/cancel — отмена',
+    ].join('\n'));
     return;
   }
 

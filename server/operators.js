@@ -57,16 +57,16 @@ export function isOperator(telegramId) {
 
 export function addOperator(name, telegramId = null) {
   const trimmed = String(name || '').trim();
-  if (!trimmed) throw new Error('Operator nomi bo\'sh bo\'lmasligi kerak');
+  if (!trimmed) throw new Error('Имя оператора не может быть пустым');
 
   const operators = listOperators();
   if (operators.some(o => o.name === trimmed)) {
-    throw new Error('Operator allaqachon mavjud');
+    throw new Error('Оператор с таким именем уже есть');
   }
   if (telegramId) {
     const tid = Number(telegramId);
     if (operators.some(o => o.telegramId === tid)) {
-      throw new Error('Bu Telegram ID boshqa operatorga bog\'langan');
+      throw new Error('Этот Telegram ID уже добавлен');
     }
   }
 
@@ -76,7 +76,27 @@ export function addOperator(name, telegramId = null) {
     telegramId: telegramId ? Number(telegramId) : null,
   };
   operators.push(op);
-  operators.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  operators.sort((a, b) => String(a.telegramId || a.name).localeCompare(String(b.telegramId || b.name), 'ru'));
+  saveOperators(operators);
+  return op;
+}
+
+export function addOperatorByTelegramId(telegramId) {
+  const tid = Number(telegramId);
+  if (!Number.isInteger(tid) || tid <= 0) throw new Error('Неверный Telegram ID');
+
+  const operators = listOperators();
+  if (operators.some(o => o.telegramId === tid)) {
+    throw new Error('Этот Telegram ID уже добавлен');
+  }
+
+  const op = {
+    id: `tg_${tid}`,
+    name: String(tid),
+    telegramId: tid,
+  };
+  operators.push(op);
+  operators.sort((a, b) => a.telegramId - b.telegramId);
   saveOperators(operators);
   return op;
 }
