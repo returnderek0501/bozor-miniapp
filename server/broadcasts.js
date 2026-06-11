@@ -7,6 +7,7 @@ import {
   listAllClientTelegramIds,
   listEmployeesForUser,
 } from './store.js';
+import { getActiveDeskOperator } from './deskOperators.js';
 
 const FILE = join(DATA_DIR, 'broadcasts.json');
 
@@ -81,7 +82,8 @@ export function resolveBroadcastRecipients(bc, creatorTelegramId) {
     return listTelegramIdsForPhones([bc.targetPhone]);
   }
   if (bc.scope === 'mine') {
-    const phones = listEmployeesForUser(creatorTelegramId).map(e => e.phone);
+    const desk = getActiveDeskOperator(creatorTelegramId);
+    const phones = listEmployeesForUser(creatorTelegramId, desk).map(e => e.phone);
     return listTelegramIdsForPhones(phones);
   }
   if (bc.scope === 'all') {

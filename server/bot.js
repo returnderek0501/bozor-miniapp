@@ -23,6 +23,9 @@ import {
   resolveBroadcastRecipients, formatBroadcastApproval,
 } from './broadcasts.js';
 import { CLIENT_EDIT_FIELDS } from './clientFields.js';
+import {
+  getActiveDeskOperator, listRecentDeskNames, rememberDeskOperatorName, enrichActorWithDesk,
+} from './deskOperators.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -35,6 +38,48 @@ function ik(rows) {
 function matchCmd(text, ...cmds) {
   const c = normalizeCmd(text);
   return cmds.includes(c);
+}
+
+function deskName(fromId) {
+  return getActiveDeskOperator(fromId);
+}
+
+function buildActor(fromId, displayName, overrideName = null) {
+  return enrichActorWithDesk(getActor(fromId, displayName), fromId, overrideName);
+}
+
+function operatorPanelTitle(fromId) {
+  const n = deskName(fromId);
+  return n
+    ? `<b>Панель оператора</b>\n👤 Сейчас: <b>${n}</b>`
+    : '<b>Панель оператора</b>\n<i>Укажите имя оператора</i>';
+}
+
+function operatorNamePickerKeyboard(telegramId, mode = 'set') {
+  const names = listRecentDeskNames(telegramId);
+  const prefix = mode === 'add' ? 'desk_add' : 'desk_set';
+  const rows = [];
+  for (let i = 0; i < names.length; i += 2) {
+    const row = [{ text: names[i], callback_data: `${prefix}:${i}` }];
+    if (names[i + 1]) row.push({ text: names[i + 1], callback_data: `${prefix}:${i + 1}` });
+    rows.push(row);
+  }
+  rows.push([{ text: '✏️ Другое имя', callback_data: `${prefix}:custom` }]);
+  if (mode === 'set') rows.push([{ text: '◀️ Панель', callback_data: 'noop_panel' }]);
+  return ik(rows);
+}
+
+async function finishAddClient(bot, chatId, fromId, phone, operatorName, displayName) {
+  rememberDeskOperatorName(fromId, operatorName);
+  const actor = buildActor(fromId, displayName, operatorName);
+  addPhone(phone, actor);
+  const emp = getEmployee(phone);
+  pending.addClient.delete(chatId);
+  await bot.sendMessage(chatId, [
+    `✅ Клиент #<code>${emp.clientId}</code>`,
+    `Тел: <code>${phone}</code>`,
+    `Оператор: <b>${operatorName}</b>`,
+  ].join('\n'), employeeActionsKeyboard(phone, fromId));
 }
 
 // ─── Keyboards ───────────────────────────────────────────────────────────────
@@ -59,6 +104,7 @@ function operatorKeyboard() {
     [{ text: '👤 Мои клиенты', callback_data: 'op_clients' }, { text: '➕ Клиент', callback_data: 'op_add' }],
     [{ text: '🔍 Поиск по ID', callback_data: 'op_find' }, { text: '🏷 Теги', callback_data: 'op_tag_menu' }],
     [{ text: '📅 Сегодня', callback_data: 'sum_today' }, { text: '✉️ Сообщение клиенту', callback_data: 'bc_by_id' }],
+    [{ text: '👤 Кто я / сменить', callback_data: 'desk_switch' }],
     [{ text: '🏷 Справочник тегов', callback_data: 'admin_tags' }, { text: 'ℹ️ Помощь', callback_data: 'op_help' }],
   ]);
 }
@@ -245,7 +291,7 @@ function formatEmployee(emp) {
 }
 
 function formatEmployeesList(telegramId) {
-  const employees = listEmployeesForUser(telegramId);
+  const employees = listEmployeesForUser(telegramId, deskName(telegramId));
   if (!employees.length) return 'Список пуст.';
   const title = isAdmin(telegramId) ? 'Все клиенты' : 'Мои клиенты';
   return [
@@ -299,7 +345,18 @@ function adminHelpText() {
 }
 
 function operatorHelpText() {
-  return 'Управление — кнопками в панели. /panel — панель оператора.';
+  return [
+    'Управление — кнопками в панели. /panel — панель оператора.',
+    '',
+    'На общем аккаунте: <b>👤 Кто я / сменить</b> — выбрать имя оператора.',
+    'При добавлении клиента укажите, кто его ведёт — имя сохранится для быстрого выбора.',
+  ].join('\n');
+}
+
+function ensureDeskOperatorForList(fromId) {
+  if (isAdmin(fromId)) return true;
+  if (deskName(fromId)) return true;
+  return false;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -313,13 +370,13 @@ function resolveClientQuery(query, telegramId) {
     emp = getEmployee(normalizePhone(q));
   }
   if (!emp?.phone) throw new Error('Клиент не найден');
-  if (!canViewClient(telegramId, emp)) throw new Error('Нет доступа');
+  if (!canViewClient(telegramId, emp, deskName(telegramId))) throw new Error('Нет доступа');
   return emp;
 }
 
 function requireClientAccess(fromId, phone) {
   const emp = getEmployee(phone);
-  if (!canManageClient(fromId, emp)) throw new Error('Нет доступа к клиенту');
+  if (!canManageClient(fromId, emp, deskName(fromId))) throw new Error('Нет доступа к клиенту');
   return emp;
 }
 
@@ -404,7 +461,7 @@ async function notifyBroadcastApprovers(bot, bc) {
 }
 
 async function finishTagAdd(bot, chatId, fromId, p, extras) {
-  const actor = getActor(fromId, '');
+  const actor = buildActor(fromId, '');
   const updated = addClientTag(p.phone, p.tagId, actor, extras);
   clearAllPending(chatId);
   await bot.sendMessage(chatId, [
@@ -466,18 +523,41 @@ async function handlePendingText(bot, msg) {
     return true;
   }
 
-  if (pending.addClient.has(chatId)) {
-    pending.addClient.delete(chatId);
+  if (pending.deskOperatorName.has(chatId)) {
+    const p = pending.deskOperatorName.get(chatId);
+    pending.deskOperatorName.delete(chatId);
+    const name = rememberDeskOperatorName(fromId, text);
     try {
-      const phone = addPhone(text, actor);
-      const emp = getEmployee(phone);
-      await bot.sendMessage(chatId, `✅ Клиент <code>${emp.clientId}</code>\nТел: <code>${phone}</code>`, {
-        ...employeeActionsKeyboard(phone, fromId),
-      });
+      if (p.mode === 'add' && p.phone) {
+        await finishAddClient(bot, chatId, fromId, p.phone, name, msg.from.first_name);
+      } else {
+        await bot.sendMessage(chatId, `✅ Вы работаете как <b>${name}</b>`, operatorKeyboard());
+      }
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
     return true;
+  }
+
+  if (pending.addClient.has(chatId)) {
+    const p = pending.addClient.get(chatId);
+    if (p.step === 'phone' || p === true) {
+      try {
+        const phone = normalizePhone(text);
+        if (!phone) throw new Error('Неверный телефон. Пример: +998901234567');
+        pending.addClient.set(chatId, { step: 'operator', phone });
+        await bot.sendMessage(chatId, [
+          `Телефон: <code>${phone}</code>`,
+          '',
+          '<b>Кто ведёт клиента?</b>',
+          'Выберите имя или введите новое.',
+        ].join('\n'), operatorNamePickerKeyboard(fromId, 'add'));
+      } catch (e) {
+        pending.addClient.delete(chatId);
+        await bot.sendMessage(chatId, `❌ ${e.message}`);
+      }
+      return true;
+    }
   }
 
   if (pending.findClient.has(chatId)) {
@@ -529,7 +609,7 @@ async function handlePendingText(bot, msg) {
         if (!res.ok) throw new Error('Не удалось отправить');
         await bot.sendMessage(chatId, '✅ Сообщение отправлено клиенту.');
       } else if (p.scope === 'mine') {
-        const ids = listTelegramIdsForPhones(listEmployeesForUser(fromId).map(e => e.phone));
+        const ids = listTelegramIdsForPhones(listEmployeesForUser(fromId, deskName(fromId)).map(e => e.phone));
         let sent = 0;
         for (const tid of ids) {
           const res = await bot.sendMessage(tid, text);
@@ -624,7 +704,7 @@ async function handleCommand(bot, msg) {
     await bot.sendMessage(chatId, '<b>Uztronix CRM</b>\n\nЛичный кабинет — Mini App.', { reply_markup: miniAppReplyKeyboard() });
     await bot.sendMessage(chatId, 'Mini App:', miniAppInlineKeyboard());
     if (isAdmin(fromId)) await bot.sendMessage(chatId, '<b>Панель администратора</b>', adminKeyboard());
-    else if (hasStaffAccess(fromId)) await bot.sendMessage(chatId, '<b>Панель оператора</b>', operatorKeyboard());
+    else if (hasStaffAccess(fromId)) await bot.sendMessage(chatId, operatorPanelTitle(fromId), operatorKeyboard());
     return;
   }
 
@@ -636,7 +716,10 @@ async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/panel', '/operator') && hasStaffAccess(fromId)) {
     clearAllPending(chatId);
-    await bot.sendMessage(chatId, '<b>Панель оператора</b>', operatorKeyboard());
+    await bot.sendMessage(chatId, operatorPanelTitle(fromId), operatorKeyboard());
+    if (!isAdmin(fromId) && !deskName(fromId) && listRecentDeskNames(fromId).length) {
+      await bot.sendMessage(chatId, 'Выберите имя для этой смены:', operatorNamePickerKeyboard(fromId, 'set'));
+    }
     return;
   }
 
@@ -670,7 +753,62 @@ async function handleCallback(bot, query) {
     'admin_admins', 'admin_export', 'admin_list', 'staff_add_op', 'staff_add_admin',
     'bc_by_id', 'bc_mine', 'bc_all', 'tag_cancel', 'tag_add_new',
   ]);
-  if (panelActions.has(data) || data === 'noop') clearAllPending(chatId);
+  const keepPending = data.startsWith('desk_add:') || data.startsWith('desk_set:') || data === 'tag_skip';
+  if (!keepPending && (panelActions.has(data) || data === 'noop')) clearAllPending(chatId);
+
+  if (data === 'desk_switch') {
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, '<b>Кто работает сейчас?</b>', operatorNamePickerKeyboard(fromId, 'set'));
+    return;
+  }
+
+  if (data.startsWith('desk_set:')) {
+    const key = data.slice(9);
+    if (key === 'custom') {
+      pending.deskOperatorName.set(chatId, { mode: 'set' });
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, 'Введите имя оператора:\n/cancel — отмена');
+      return;
+    }
+    const names = listRecentDeskNames(fromId);
+    const name = names[Number(key)];
+    if (!name) {
+      await bot.answerCallbackQuery(query.id, 'Не найдено');
+      return;
+    }
+    rememberDeskOperatorName(fromId, name);
+    await bot.answerCallbackQuery(query.id, name);
+    await bot.sendMessage(chatId, operatorPanelTitle(fromId), operatorKeyboard());
+    return;
+  }
+
+  if (data.startsWith('desk_add:')) {
+    const key = data.slice(9);
+    const p = pending.addClient.get(chatId);
+    if (!p?.phone) {
+      await bot.answerCallbackQuery(query.id, 'Сначала введите телефон');
+      return;
+    }
+    if (key === 'custom') {
+      pending.deskOperatorName.set(chatId, { mode: 'add', phone: p.phone });
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, 'Введите имя оператора:\n/cancel — отмена');
+      return;
+    }
+    const names = listRecentDeskNames(fromId);
+    const name = names[Number(key)];
+    if (!name) {
+      await bot.answerCallbackQuery(query.id, 'Не найдено');
+      return;
+    }
+    try {
+      await bot.answerCallbackQuery(query.id, name);
+      await finishAddClient(bot, chatId, fromId, p.phone, name, query.from?.first_name || '');
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
 
   if (data === 'noop') {
     await bot.answerCallbackQuery(query.id);
@@ -679,7 +817,7 @@ async function handleCallback(bot, query) {
 
   if (data === 'noop_panel') {
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, isAdmin(fromId) ? '<b>Панель администратора</b>' : '<b>Панель оператора</b>', panelKeyboard(fromId));
+    await bot.sendMessage(chatId, isAdmin(fromId) ? '<b>Панель администратора</b>' : operatorPanelTitle(fromId), panelKeyboard(fromId));
     return;
   }
 
@@ -691,7 +829,7 @@ async function handleCallback(bot, query) {
 
   if (data === 'op_panel' && hasStaffAccess(fromId)) {
     await bot.answerCallbackQuery(query.id);
-    await bot.editMessageText(chatId, messageId, '<b>Панель оператора</b>', operatorKeyboard());
+    await bot.editMessageText(chatId, messageId, operatorPanelTitle(fromId), operatorKeyboard());
     return;
   }
 
@@ -809,6 +947,13 @@ async function handleCallback(bot, query) {
 
   if (data === 'op_clients') {
     await bot.answerCallbackQuery(query.id);
+    if (!ensureDeskOperatorForList(fromId)) {
+      await bot.sendMessage(chatId, [
+        '<b>Сначала укажите имя оператора</b>',
+        'На общем аккаунте каждый работает под своим именем.',
+      ].join('\n'), operatorNamePickerKeyboard(fromId, 'set'));
+      return;
+    }
     await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), operatorKeyboard());
     return;
   }
@@ -852,14 +997,14 @@ async function handleCallback(bot, query) {
   }
 
   if (data === 'adm_add' && isAdmin(fromId)) {
-    pending.addClient.set(chatId, true);
+    pending.addClient.set(chatId, { step: 'phone' });
     await bot.answerCallbackQuery(query.id);
     await bot.sendMessage(chatId, 'Телефон клиента:\n<code>+998901234567</code>\n/cancel — отмена');
     return;
   }
 
   if (data === 'op_add') {
-    pending.addClient.set(chatId, true);
+    pending.addClient.set(chatId, { step: 'phone' });
     await bot.answerCallbackQuery(query.id);
     await bot.sendMessage(chatId, 'Телефон клиента:\n<code>+998901234567</code>\n/cancel — отмена');
     return;

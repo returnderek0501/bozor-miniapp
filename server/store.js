@@ -33,8 +33,8 @@ export function normalizeCard(raw) {
 function assignActorToClient(emp, actor) {
   if (!actor) return;
   emp.createdBy = actor.id;
-  emp.createdByName = actor.name || '';
-  const opName = actor.operatorName || actor.name || '';
+  const opName = actor.deskOperatorName || actor.operatorName || actor.name || '';
+  emp.createdByName = opName;
   emp.operator = opName;
   emp.operatorId = actor.operatorId || '';
 }
@@ -217,9 +217,11 @@ export function listEmployees() {
   return listPhones().map(p => getEmployee(p));
 }
 
-export function listEmployeesForUser(telegramId) {
+export function listEmployeesForUser(telegramId, deskOperatorName = '') {
   const all = listEmployees();
   if (isAdmin(telegramId)) return all;
+  const name = String(deskOperatorName || '').trim();
+  if (name) return all.filter(e => e.operator === name);
   return all.filter(e => e.createdBy === Number(telegramId));
 }
 
