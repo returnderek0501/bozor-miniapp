@@ -2,7 +2,7 @@ import {
   addPhone,
   getEmployee, setEmployeeField, listEmployeesForUser, findEmployeeByClientId,
   normalizePhoneForOperator, resolvePhoneKey, getClientTag,
-  addClientTag, removeClientTag,
+  addClientTag, removeClientTag, addClientTagFreeform,
   setEmployeeOperator,
   listTelegramIdsForPhones, getTelegramIdByPhone,
   setKycStatus,
@@ -549,16 +549,51 @@ async function finishTagAdd(bot, chatId, fromId, p, extras) {
   ].join('\n'), employeeActionsKeyboard(updated.phone, fromId));
 }
 
+async function finishFreeformTag(bot, chatId, fromId, phone, label, extras = {}) {
+  const actor = buildActor(fromId, '');
+  const updated = addClientTagFreeform(phone, label, actor, extras);
+  pending.tagFreeform.delete(chatId);
+  await bot.sendMessage(chatId, [
+    `✅ Тег <b>${label}</b>`,
+    `Клиент: <code>${updated.clientId}</code>`,
+  ].join('\n'), employeeActionsKeyboard(updated.phone, fromId));
+}
+
+async function sendTagPicker(bot, chatId, phone, emp, fromId) {
+  pending.tagFreeform.set(chatId, { phone });
+  await bot.sendMessage(chatId, [
+    `Теги — #<code>${emp.clientId}</code>`,
+    '',
+    'Выберите тег из списка или <b>отправьте свой текстом</b>.',
+    'Можно прикрепить фото с подписью.',
+    '/cancel — отмена',
+  ].join('\n'), tagPickerKeyboard(phone, emp, fromId));
+}
+
 // ─── Message handlers ────────────────────────────────────────────────────────
 
 async function handleMediaMessage(bot, msg) {
   const chatId = msg.chat.id;
   const fromId = msg.from.id;
-  const p = pending.tagAdd.get(chatId);
-  if (!p || !hasStaffAccess(fromId)) return;
-
   const fileId = extractFileId(msg);
-  if (!fileId) return;
+  if (!fileId || !hasStaffAccess(fromId)) return;
+
+  const pFree = pending.tagFreeform.get(chatId);
+  if (pFree) {
+    try {
+      const emp = requireClientAccess(fromId, pFree.phone);
+      const photo = await saveTelegramFile(bot, fileId, emp.clientId, `tag_${Date.now()}`);
+      const caption = (msg.caption || '').trim();
+      const label = caption || 'Фото';
+      await finishFreeformTag(bot, chatId, fromId, pFree.phone, label, { photo });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return;
+  }
+
+  const p = pending.tagAdd.get(chatId);
+  if (!p) return;
 
   try {
     const emp = requireClientAccess(fromId, p.phone);
@@ -581,6 +616,17 @@ async function handlePendingText(bot, msg) {
     try {
       requireClientAccess(fromId, p.phone);
       await finishTagAdd(bot, chatId, fromId, p, { note: text });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (pending.tagFreeform.has(chatId)) {
+    const p = pending.tagFreeform.get(chatId);
+    try {
+      requireClientAccess(fromId, p.phone);
+      await finishFreeformTag(bot, chatId, fromId, p.phone, text);
     } catch (e) {
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
@@ -1195,7 +1241,7 @@ async function handleCallback(bot, query) {
     try {
       const emp = requireClientAccess(fromId, phone);
       await bot.answerCallbackQuery(query.id);
-      await bot.sendMessage(chatId, `Теги — #<code>${emp.clientId}</code>:`, tagPickerKeyboard(phone, emp, fromId));
+      await sendTagPicker(bot, chatId, phone, emp, fromId);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
@@ -1207,9 +1253,10 @@ async function handleCallback(bot, query) {
     try {
       const emp = requireClientAccess(fromId, phone);
       pending.clientList.delete(chatId);
+      pending.tagFreeform.delete(chatId);
       await bot.answerCallbackQuery(query.id);
       if (data.startsWith('pick_tg')) {
-        await bot.sendMessage(chatId, `Теги — #<code>${emp.clientId}</code>:`, tagPickerKeyboard(phone, emp, fromId));
+        await sendTagPicker(bot, chatId, phone, emp, fromId);
       } else {
         await bot.sendMessage(chatId, formatEmployee(emp), employeeActionsKeyboard(phone, fromId));
       }
@@ -1317,6 +1364,7 @@ async function handleCallback(bot, query) {
       const emp = requireClientAccess(fromId, phone);
       const tag = listTagsForUser(fromId).find(t => t.id === tagId);
       if (!tag) throw new Error('Тег не найден');
+      pending.tagFreeform.delete(chatId);
       pending.tagAdd.set(chatId, { phone, tagId, tagLabel: tag.label });
       await bot.answerCallbackQuery(query.id);
       await bot.sendMessage(chatId, [
