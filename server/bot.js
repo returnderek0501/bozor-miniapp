@@ -2,7 +2,7 @@ import {
   addPhone,
   getEmployee, setEmployeeField, listEmployeesForUser, findEmployeeByClientId,
   maskCard,
-  normalizePhone, getClientTag,
+  normalizePhone, normalizePhoneForOperator, getClientTag,
   addClientTag, removeClientTag,
   listTelegramIdsForPhones, getTelegramIdByPhone,
   setKycStatus,
@@ -379,7 +379,7 @@ function resolveClientQuery(query, telegramId) {
   if (/^\d+$/.test(q) || /^CLT-/i.test(q)) {
     emp = findEmployeeByClientId(q);
   } else {
-    emp = getEmployee(normalizePhone(q));
+    emp = getEmployee(q);
   }
   if (!emp?.phone) throw new Error('Клиент не найден');
   if (!canViewClient(telegramId, emp, deskName(telegramId))) throw new Error('Нет доступа');
@@ -555,8 +555,8 @@ async function handlePendingText(bot, msg) {
     const p = pending.addClient.get(chatId);
     if (p.step === 'phone' || p === true) {
       try {
-        const phone = normalizePhone(text);
-        if (!phone) throw new Error('Укажите номер телефона');
+        const phone = normalizePhoneForOperator(text);
+        if (!phone) throw new Error('Неверный телефон. Номер должен содержать код +998. Пример: +998901234567');
         pending.addClient.set(chatId, { step: 'operator', phone });
         await bot.sendMessage(chatId, [
           `Телефон: <code>${phone}</code>`,
@@ -997,14 +997,14 @@ async function handleCallback(bot, query) {
   if (data === 'adm_add' && isAdmin(fromId)) {
     pending.addClient.set(chatId, { step: 'phone' });
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Введите телефон клиента:\n/cancel — отмена');
+    await bot.sendMessage(chatId, 'Телефон клиента:\n<code>+998901234567</code>\n/cancel — отмена');
     return;
   }
 
   if (data === 'op_add') {
     pending.addClient.set(chatId, { step: 'phone' });
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Введите телефон клиента:\n/cancel — отмена');
+    await bot.sendMessage(chatId, 'Телефон клиента:\n<code>+998901234567</code>\n/cancel — отмена');
     return;
   }
 

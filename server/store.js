@@ -16,22 +16,26 @@ function triggerSync() {
 
 export function normalizePhone(raw) {
   if (!raw) return null;
+  let digits = String(raw).replace(/\D/g, '');
+  if (digits.startsWith('998')) digits = digits.slice(3);
+  if (digits.length === 9 && digits.startsWith('9')) return `+998${digits}`;
+  if (digits.length === 12 && digits.startsWith('998')) return `+${digits}`;
+  return null;
+}
+
+/** Для оператора/админа при добавлении клиента: любой номер с кодом +998 */
+export function normalizePhoneForOperator(raw) {
+  if (!raw) return null;
   const digits = String(raw).replace(/\D/g, '');
   if (!digits) return null;
 
-  // Uzbek local: 9XXXXXXXX
-  if (digits.length === 9 && digits.startsWith('9')) {
-    return `+998${digits}`;
+  if (digits.startsWith('998')) {
+    const local = digits.slice(3);
+    if (!local) return null;
+    return `+998${local}`;
   }
-  // Full Uzbek international: 998XXXXXXXXX
-  if (digits.length === 12 && digits.startsWith('998')) {
-    return `+${digits}`;
-  }
-  // Any other phone number
-  if (digits.length >= 7) {
-    return `+${digits}`;
-  }
-  return null;
+
+  return `+998${digits}`;
 }
 
 export function normalizeCard(raw) {
@@ -114,8 +118,8 @@ export function listPhones() {
 }
 
 export function addPhone(raw, actor = null) {
-  const phone = normalizePhone(raw);
-  if (!phone) throw new Error('Укажите номер телефона');
+  const phone = normalizePhoneForOperator(raw);
+  if (!phone) throw new Error('Noto\'g\'ri telefon raqami. Raqam +998 kodini o\'z ichiga olishi kerak. Misol: +998901234567');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
   const isNew = !data.phones.includes(phone);
@@ -148,8 +152,8 @@ export function addPhone(raw, actor = null) {
 }
 
 export function removePhone(raw) {
-  const phone = normalizePhone(raw);
-  if (!phone) throw new Error('Укажите номер телефона');
+  const phone = normalizePhone(raw) || normalizePhoneForOperator(raw);
+  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
   data.phones = data.phones.filter(p => p !== phone);
@@ -217,7 +221,7 @@ function writeEmployees(all) {
 }
 
 export function getEmployee(rawPhone) {
-  const phone = normalizePhone(rawPhone);
+  const phone = normalizePhone(rawPhone) || normalizePhoneForOperator(rawPhone);
   if (!phone) return null;
   const all = readEmployees();
   if (!all[phone]) {
