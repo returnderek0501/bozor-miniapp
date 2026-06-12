@@ -32,7 +32,7 @@ export function AuthGate({ onVerify }: Props) {
     setError('');
 
     const digits = phone.replace(/\D/g, '');
-    if (digits.length !== 9 || !digits.startsWith('9')) {
+    if (digits.length !== 9) {
       setError(t('error.simDetail'));
       return;
     }
@@ -92,7 +92,7 @@ export function AuthGate({ onVerify }: Props) {
                         aria-label={t('auth.phoneLabel')}
                       />
                       {showGhost && (
-                        <span className="auth-gate__ghost" aria-hidden>90 123 45 67</span>
+                        <span className="auth-gate__ghost" aria-hidden>50 123 45 67</span>
                       )}
                     </div>
                   </div>

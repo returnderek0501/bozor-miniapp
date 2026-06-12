@@ -16,10 +16,17 @@ function triggerSync() {
 
 export function normalizePhone(raw) {
   if (!raw) return null;
-  let digits = String(raw).replace(/\D/g, '');
-  if (digits.startsWith('998')) digits = digits.slice(3);
-  if (digits.length === 9 && digits.startsWith('9')) return `+998${digits}`;
-  if (digits.length === 12 && digits.startsWith('998')) return `+${digits}`;
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return null;
+
+  if (digits.startsWith('998')) {
+    const local = digits.slice(3);
+    if (local.length === 9) return `+998${local}`;
+    return null;
+  }
+
+  if (digits.length === 9) return `+998${digits}`;
+
   return null;
 }
 
@@ -181,7 +188,7 @@ export function removePhone(raw) {
 }
 
 export function isPhoneAllowed(raw) {
-  const phone = normalizePhone(raw);
+  const phone = normalizePhone(raw) || normalizePhoneForOperator(raw);
   if (!phone) return false;
   return listPhones().includes(phone);
 }
@@ -210,7 +217,7 @@ export function listAllClientTelegramIds() {
 }
 
 export function getTelegramIdByPhone(phone) {
-  const normalized = normalizePhone(phone);
+  const normalized = normalizePhone(phone) || normalizePhoneForOperator(phone);
   const sessions = readAllSessions();
   for (const [tid, s] of Object.entries(sessions)) {
     if (s?.phone === normalized) return Number(tid);
@@ -220,8 +227,9 @@ export function getTelegramIdByPhone(phone) {
 
 export function setSession(telegramId, phone) {
   const sessions = readJson(SESSIONS_FILE, {});
+  const normalized = normalizePhone(phone) || normalizePhoneForOperator(phone);
   sessions[String(telegramId)] = {
-    phone: normalizePhone(phone),
+    phone: normalized,
     verifiedAt: new Date().toISOString(),
   };
   writeJson(SESSIONS_FILE, sessions);
