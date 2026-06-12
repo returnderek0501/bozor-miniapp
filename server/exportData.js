@@ -1,23 +1,17 @@
 import { formatTagTime } from './tags.js';
 import { kycStatusLabel } from './kyc.js';
 
-function maskCard(card) {
-  if (!card || card.length < 8) return card;
-  return `${card.slice(0, 4)} **** **** ${card.slice(-4)}`;
-}
-
 export const HEADERS_MAIN = [
   'ID клиента',
   'Телефон',
   'ФИО',
   'Должность',
-  'Отдел',
-  'Стаж',
+  'Возраст',
+  'Семейное положение',
   'ID сотрудника',
   'Аванс (сум)',
   'Оператор',
   'Активные теги',
-  'Карты',
   'Создан',
   'Обновлён',
   'Внёс в систему',
@@ -81,14 +75,13 @@ export function rowFromEmployee(emp) {
     emp.clientId || '',
     emp.phone,
     emp.fullName || '',
-    emp.position || '',
-    emp.department || '',
-    emp.tenure || '',
+    emp.position || 'Agent',
+    emp.age ?? '',
+    emp.maritalStatus || '',
     emp.employeeId || '',
     emp.advanceBalance ?? 0,
     emp.operator || '',
     formatActiveTags(emp),
-    (emp.allowedCards || []).map(c => maskCard(c)).join(', '),
     emp.createdAt ? formatTagTime(emp.createdAt) : '',
     emp.updatedAt ? formatTagTime(emp.updatedAt) : '',
     emp.createdByName || '',

@@ -81,15 +81,15 @@ export function CabinetScreen() {
         <div className="cabinet__rows">
           <div className="cabinet__row">
             <span>{t('cabinet.position')}</span>
-            <strong>{p?.position || '—'}</strong>
+            <strong>{p?.position || 'Agent'}</strong>
           </div>
           <div className="cabinet__row">
-            <span>{t('cabinet.department')}</span>
-            <strong>{p?.department || '—'}</strong>
+            <span>{t('cabinet.age')}</span>
+            <strong>{p?.age ?? '—'}</strong>
           </div>
           <div className="cabinet__row">
-            <span>{t('cabinet.tenure')}</span>
-            <strong>{p?.tenure || '—'}</strong>
+            <span>{t('cabinet.maritalStatus')}</span>
+            <strong>{p?.maritalStatus || '—'}</strong>
           </div>
           <div className="cabinet__row">
             <span>{t('cabinet.phone')}</span>

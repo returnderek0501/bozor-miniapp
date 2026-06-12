@@ -58,21 +58,22 @@ function assignActorToClient(emp, actor) {
   emp.operatorId = actor.operatorId || '';
 }
 
+const FIXED_POSITION = 'Agent';
+
 function defaultEmployee(phone) {
   return {
     phone,
     clientId: '',
     fullName: '',
-    position: '',
-    department: '',
-    tenure: '',
+    position: FIXED_POSITION,
+    age: '',
+    maritalStatus: '',
     employeeId: '',
     advanceBalance: 0,
     operator: '',
     operatorId: '',
     tags: [],
     tagHistory: [],
-    allowedCards: [],
     createdAt: null,
     createdBy: null,
     createdByName: '',
@@ -120,6 +121,9 @@ function migrateEmployee(emp) {
   if (!('idCardFront' in emp.kycDocuments)) emp.kycDocuments.idCardFront = null;
   if (!('idCardBack' in emp.kycDocuments)) emp.kycDocuments.idCardBack = null;
   if (!('selfie' in emp.kycDocuments)) emp.kycDocuments.selfie = null;
+  emp.position = FIXED_POSITION;
+  if (emp.age === undefined || emp.age === null) emp.age = '';
+  if (emp.maritalStatus === undefined || emp.maritalStatus === null) emp.maritalStatus = '';
   return emp;
 }
 
@@ -268,9 +272,8 @@ export function findEmployeeByClientId(clientId) {
 
 const EMPLOYEE_FIELDS = {
   name: 'fullName', ism: 'fullName', fio: 'fullName',
-  position: 'position', lavozim: 'position',
-  dept: 'department', bolim: 'department', bo_lim: 'department',
-  tenure: 'tenure', staj: 'tenure',
+  age: 'age', yosh: 'age',
+  marital: 'maritalStatus', maritalstatus: 'maritalStatus', family: 'maritalStatus',
   balance: 'advanceBalance', avans: 'advanceBalance',
   id: 'employeeId', empid: 'employeeId',
   operator: 'operator', oper: 'operator',
@@ -282,15 +285,16 @@ export function setEmployeeField(rawPhone, field, value) {
 
   const mapped = EMPLOYEE_FIELDS[field.toLowerCase()];
   if (!mapped) {
-    throw new Error('Noma\'lum maydon. Mavjud: name, position, dept, tenure, balance, id, operator');
+    throw new Error('Noma\'lum maydon. Mavjud: name, age, marital, balance, id, operator');
   }
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
 
-  if (mapped === 'advanceBalance') {
+  if (mapped === 'advanceBalance' || mapped === 'age') {
     const num = Number(String(value).replace(/\s/g, ''));
-    if (Number.isNaN(num)) throw new Error('Balans raqam bo\'lishi kerak');
+    if (Number.isNaN(num)) throw new Error(mapped === 'age' ? 'Yosh raqam bo\'lishi kerak' : 'Balans raqam bo\'lishi kerak');
+    if (mapped === 'age' && (num < 1 || num > 120)) throw new Error('Yosh 1–120 oralig\'ida bo\'lishi kerak');
     emp[mapped] = num;
   } else {
     emp[mapped] = value;
@@ -412,46 +416,6 @@ export function hasClientTag(emp, tagId) {
   return (emp.tags || []).some(t => t.id === tagId);
 }
 
-export function addEmployeeCard(rawPhone, rawCard) {
-  const phone = resolvePhoneKey(rawPhone);
-  const card = normalizeCard(rawCard);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
-  if (!card) throw new Error('Noto\'g\'ri karta raqami');
-
-  const all = readEmployees();
-  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
-  if (!emp.allowedCards.includes(card)) {
-    emp.allowedCards.push(card);
-    emp.allowedCards.sort();
-  }
-  emp.updatedAt = new Date().toISOString();
-  all[phone] = emp;
-  writeEmployees(all);
-  return card;
-}
-
-export function removeEmployeeCard(rawPhone, rawCard) {
-  const phone = resolvePhoneKey(rawPhone);
-  const card = normalizeCard(rawCard);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
-  if (!card) throw new Error('Noto\'g\'ri karta raqami');
-
-  const all = readEmployees();
-  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
-  emp.allowedCards = emp.allowedCards.filter(c => c !== card);
-  emp.updatedAt = new Date().toISOString();
-  all[phone] = emp;
-  writeEmployees(all);
-  return card;
-}
-
-export function isCardAllowed(rawPhone, rawCard) {
-  const phone = normalizePhone(rawPhone);
-  const card = normalizeCard(rawCard);
-  if (!phone || !card) return false;
-  return getEmployee(phone).allowedCards.includes(card);
-}
-
 export function isKycApproved(rawPhone) {
   const emp = getEmployee(rawPhone);
   return emp?.kycStatus === 'approved';
@@ -513,7 +477,6 @@ export function withdrawAdvance(rawPhone, rawCard, amount) {
   const phone = normalizePhone(rawPhone);
   const card = normalizeCard(rawCard);
   if (!phone || !card) throw new Error('INVALID_DATA');
-  if (!isCardAllowed(phone, card)) throw new Error('CARD_NOT_SUPPORTED');
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
@@ -547,9 +510,9 @@ export function publicEmployee(emp, phoneMasked) {
   const kycStatus = emp.kycStatus || 'none';
   return {
     fullName: emp.fullName,
-    position: emp.position,
-    department: emp.department,
-    tenure: emp.tenure,
+    position: FIXED_POSITION,
+    age: emp.age ?? '',
+    maritalStatus: emp.maritalStatus ?? '',
     employeeId: emp.employeeId,
     advanceBalance: emp.advanceBalance,
     phone: phoneMasked,

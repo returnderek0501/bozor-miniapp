@@ -1,8 +1,7 @@
 export const CLIENT_EDIT_FIELDS = [
   { key: 'name', label: 'Имя / ФИО', field: 'name' },
-  { key: 'position', label: 'Должность', field: 'position' },
-  { key: 'dept', label: 'Отдел', field: 'dept' },
-  { key: 'tenure', label: 'Стаж', field: 'tenure' },
+  { key: 'age', label: 'Возраст', field: 'age' },
+  { key: 'marital', label: 'Семейное положение', field: 'marital' },
   { key: 'id', label: 'ID кабинета', field: 'id' },
   { key: 'balance', label: 'Аванс (сум)', field: 'balance' },
 ];
