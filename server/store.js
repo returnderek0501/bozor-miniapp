@@ -38,6 +38,10 @@ export function normalizePhoneForOperator(raw) {
   return `+998${digits}`;
 }
 
+export function resolvePhoneKey(raw) {
+  return normalizePhone(raw) || normalizePhoneForOperator(raw);
+}
+
 export function normalizeCard(raw) {
   if (!raw) return null;
   const digits = String(raw).replace(/\D/g, '');
@@ -273,7 +277,7 @@ const EMPLOYEE_FIELDS = {
 };
 
 export function setEmployeeField(rawPhone, field, value) {
-  const phone = normalizePhone(rawPhone);
+  const phone = resolvePhoneKey(rawPhone);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
 
   const mapped = EMPLOYEE_FIELDS[field.toLowerCase()];
@@ -299,7 +303,8 @@ export function setEmployeeField(rawPhone, field, value) {
 }
 
 export function setEmployeeOperator(rawPhone, operatorName, operatorId = '') {
-  const phone = normalizePhone(rawPhone);
+  const phone = resolvePhoneKey(rawPhone);
+  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   emp.operator = String(operatorName || '').trim();
@@ -408,7 +413,7 @@ export function hasClientTag(emp, tagId) {
 }
 
 export function addEmployeeCard(rawPhone, rawCard) {
-  const phone = normalizePhone(rawPhone);
+  const phone = resolvePhoneKey(rawPhone);
   const card = normalizeCard(rawCard);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
   if (!card) throw new Error('Noto\'g\'ri karta raqami');
@@ -426,7 +431,7 @@ export function addEmployeeCard(rawPhone, rawCard) {
 }
 
 export function removeEmployeeCard(rawPhone, rawCard) {
-  const phone = normalizePhone(rawPhone);
+  const phone = resolvePhoneKey(rawPhone);
   const card = normalizeCard(rawCard);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
   if (!card) throw new Error('Noto\'g\'ri karta raqami');
