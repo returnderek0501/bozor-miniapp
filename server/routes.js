@@ -114,9 +114,9 @@ export function createApiRouter(botToken) {
       return res.status(401).json({ error: 'unauthorized' });
     }
 
-    const { idCard, selfie } = req.body || {};
-    if (!idCard || !selfie) {
-      return res.status(400).json({ success: false, message: 'Загрузите оба фото' });
+    const { idCardFront, idCardBack, selfie } = req.body || {};
+    if (!idCardFront || !idCardBack || !selfie) {
+      return res.status(400).json({ success: false, message: 'Загрузите все три фото' });
     }
 
     try {
@@ -125,10 +125,12 @@ export function createApiRouter(botToken) {
         return res.status(400).json({ success: false, message: 'Профиль не найден' });
       }
 
-      const idParsed = parseBase64Image(idCard);
+      const frontParsed = parseBase64Image(idCardFront);
+      const backParsed = parseBase64Image(idCardBack);
       const selfieParsed = parseBase64Image(selfie);
       const documents = {
-        idCard: saveKycBuffer(emp.clientId, 'id_card', idParsed.buffer, idParsed.ext),
+        idCardFront: saveKycBuffer(emp.clientId, 'id_card_front', frontParsed.buffer, frontParsed.ext),
+        idCardBack: saveKycBuffer(emp.clientId, 'id_card_back', backParsed.buffer, backParsed.ext),
         selfie: saveKycBuffer(emp.clientId, 'selfie', selfieParsed.buffer, selfieParsed.ext),
       };
 
@@ -144,7 +146,7 @@ export function createApiRouter(botToken) {
       const messages = {
         KYC_PENDING: 'Документы уже на проверке',
         KYC_ALREADY_APPROVED: 'KYC уже подтверждён',
-        KYC_DOCUMENTS_REQUIRED: 'Загрузите оба фото',
+        KYC_DOCUMENTS_REQUIRED: 'Загрузите все три фото',
       };
       res.status(400).json({
         success: false,

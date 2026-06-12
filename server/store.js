@@ -63,7 +63,7 @@ function defaultEmployee(phone) {
     kycReviewedBy: null,
     kycReviewedByName: '',
     kycRejectionReason: '',
-    kycDocuments: { idCard: null, selfie: null },
+    kycDocuments: { idCardFront: null, idCardBack: null, selfie: null },
     updatedAt: new Date().toISOString(),
   };
 }
@@ -93,7 +93,14 @@ function migrateEmployee(emp) {
   if (!emp.tagHistory) emp.tagHistory = [];
   if (!emp.clientId) assignClientIdIfMissing(emp);
   if (!emp.kycStatus) emp.kycStatus = 'none';
-  if (!emp.kycDocuments) emp.kycDocuments = { idCard: null, selfie: null };
+  if (!emp.kycDocuments) emp.kycDocuments = { idCardFront: null, idCardBack: null, selfie: null };
+  if (emp.kycDocuments.idCard && !emp.kycDocuments.idCardFront) {
+    emp.kycDocuments.idCardFront = emp.kycDocuments.idCard;
+    delete emp.kycDocuments.idCard;
+  }
+  if (!('idCardFront' in emp.kycDocuments)) emp.kycDocuments.idCardFront = null;
+  if (!('idCardBack' in emp.kycDocuments)) emp.kycDocuments.idCardBack = null;
+  if (!('selfie' in emp.kycDocuments)) emp.kycDocuments.selfie = null;
   return emp;
 }
 
@@ -438,7 +445,9 @@ export function submitKyc(rawPhone, documents) {
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   if (emp.kycStatus === 'pending') throw new Error('KYC_PENDING');
   if (emp.kycStatus === 'approved') throw new Error('KYC_ALREADY_APPROVED');
-  if (!documents?.idCard?.path || !documents?.selfie?.path) throw new Error('KYC_DOCUMENTS_REQUIRED');
+  if (!documents?.idCardFront?.path || !documents?.idCardBack?.path || !documents?.selfie?.path) {
+    throw new Error('KYC_DOCUMENTS_REQUIRED');
+  }
 
   const now = new Date().toISOString();
   emp.kycDocuments = documents;
