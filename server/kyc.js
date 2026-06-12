@@ -87,7 +87,7 @@ export async function notifyOperatorKycReview(emp) {
   }
 }
 
-export async function notifyClientKycResult(emp, approved, reason = '') {
+export async function notifyClientKycResult(emp, approved) {
   if (!botRef || !emp) return;
   const tid = getTelegramIdByPhone(emp.phone);
   if (!tid) return;
@@ -96,8 +96,7 @@ export async function notifyClientKycResult(emp, approved, reason = '') {
     ? '✅ <b>KYC подтверждён</b>\n\nТеперь вы можете выводить аванс в личном кабинете.'
     : [
       '❌ <b>KYC отклонён</b>',
-      reason ? `\nПричина: ${reason}` : '',
-      '\nЗагрузите документы заново в разделе «Документы».',
+      '\nДокументы не прошли проверку. Загрузите их заново в разделе «Документы».',
     ].join('');
 
   try {

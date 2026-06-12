@@ -102,8 +102,8 @@ export function DocumentsScreen() {
         <strong>{t(kycStatusKey(status))}</strong>
       </div>
 
-      {status === 'rejected' && profile?.kycRejectionReason && (
-        <p className="documents__reject">{profile.kycRejectionReason}</p>
+      {status === 'rejected' && (
+        <p className="documents__reject">{t('kyc.rejectedHint')}</p>
       )}
 
       {status === 'approved' && (

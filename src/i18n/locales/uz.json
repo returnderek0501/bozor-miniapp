@@ -89,6 +89,7 @@
     "withdrawBlocked": "Avans chiqarish faqat KYC tasdiqlangandan keyin mumkin.",
     "goDocuments": "KYC dan o'tish →",
     "approvedHint": "Tekshiruv o'tdi. Avansni chiqarishingiz mumkin.",
-    "pendingHint": "Hujjatlar tekshiruvda. Operator qarorini kuting."
+    "pendingHint": "Hujjatlar tekshiruvda. Qarorni kuting.",
+    "rejectedHint": "Hujjatlar tekshiruvdan o'tmadi. Ularni qayta yuklang."
   }
 }
