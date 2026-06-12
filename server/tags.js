@@ -70,6 +70,8 @@ function slugify(label) {
     .slice(0, 32) || `tag_${Date.now()}`;
 }
 
+export { slugify };
+
 export function addTag(label, customId, actor = null) {
   const trimmed = String(label || '').trim();
   if (!trimmed) throw new Error('Название тега не может быть пустым');

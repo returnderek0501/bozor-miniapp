@@ -23,8 +23,8 @@ export interface AuthStatus {
 export interface EmployeeProfile {
   fullName: string;
   position: string;
-  department: string;
-  tenure: string;
+  age: number | string;
+  maritalStatus: string;
   employeeId: string;
   advanceBalance: number;
   phone: string;

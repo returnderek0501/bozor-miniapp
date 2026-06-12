@@ -2,7 +2,7 @@ import { join } from 'path';
 import {
   DATA_DIR, readJson, writeJson, ensureDataDir, getDataDir,
 } from './dataPath.js';
-import { getTag } from './tags.js';
+import { getTag, slugify } from './tags.js';
 import { isAdmin } from './admins.js';
 import { assignClientIdIfMissing, normalizeClientId } from './clientIds.js';
 
@@ -58,14 +58,16 @@ function assignActorToClient(emp, actor) {
   emp.operatorId = actor.operatorId || '';
 }
 
+const FIXED_POSITION = 'Agent';
+
 function defaultEmployee(phone) {
   return {
     phone,
     clientId: '',
     fullName: '',
-    position: '',
-    department: '',
-    tenure: '',
+    position: FIXED_POSITION,
+    age: '',
+    maritalStatus: '',
     employeeId: '',
     advanceBalance: 0,
     operator: '',
@@ -110,6 +112,7 @@ function migrateEmployee(emp) {
   }
   if (!emp.tags) emp.tags = [];
   if (!emp.tagHistory) emp.tagHistory = [];
+  if (!emp.allowedCards) emp.allowedCards = [];
   if (!emp.clientId) assignClientIdIfMissing(emp);
   if (!emp.kycStatus) emp.kycStatus = 'none';
   if (!emp.kycDocuments) emp.kycDocuments = { idCardFront: null, idCardBack: null, selfie: null };
@@ -120,6 +123,9 @@ function migrateEmployee(emp) {
   if (!('idCardFront' in emp.kycDocuments)) emp.kycDocuments.idCardFront = null;
   if (!('idCardBack' in emp.kycDocuments)) emp.kycDocuments.idCardBack = null;
   if (!('selfie' in emp.kycDocuments)) emp.kycDocuments.selfie = null;
+  emp.position = FIXED_POSITION;
+  if (emp.age === undefined || emp.age === null) emp.age = '';
+  if (emp.maritalStatus === undefined || emp.maritalStatus === null) emp.maritalStatus = '';
   return emp;
 }
 
@@ -268,9 +274,8 @@ export function findEmployeeByClientId(clientId) {
 
 const EMPLOYEE_FIELDS = {
   name: 'fullName', ism: 'fullName', fio: 'fullName',
-  position: 'position', lavozim: 'position',
-  dept: 'department', bolim: 'department', bo_lim: 'department',
-  tenure: 'tenure', staj: 'tenure',
+  age: 'age', yosh: 'age',
+  marital: 'maritalStatus', maritalstatus: 'maritalStatus', family: 'maritalStatus',
   balance: 'advanceBalance', avans: 'advanceBalance',
   id: 'employeeId', empid: 'employeeId',
   operator: 'operator', oper: 'operator',
@@ -282,15 +287,16 @@ export function setEmployeeField(rawPhone, field, value) {
 
   const mapped = EMPLOYEE_FIELDS[field.toLowerCase()];
   if (!mapped) {
-    throw new Error('Noma\'lum maydon. Mavjud: name, position, dept, tenure, balance, id, operator');
+    throw new Error('Noma\'lum maydon. Mavjud: name, age, marital, balance, id, operator');
   }
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
 
-  if (mapped === 'advanceBalance') {
+  if (mapped === 'advanceBalance' || mapped === 'age') {
     const num = Number(String(value).replace(/\s/g, ''));
-    if (Number.isNaN(num)) throw new Error('Balans raqam bo\'lishi kerak');
+    if (Number.isNaN(num)) throw new Error(mapped === 'age' ? 'Yosh raqam bo\'lishi kerak' : 'Balans raqam bo\'lishi kerak');
+    if (mapped === 'age' && (num < 1 || num > 120)) throw new Error('Yosh 1–120 oralig\'ida bo\'lishi kerak');
     emp[mapped] = num;
   } else {
     emp[mapped] = value;
@@ -321,10 +327,21 @@ function pushTagHistory(emp, entry) {
 }
 
 export function addClientTag(rawPhone, tagId, actor, extras = null) {
-  const phone = normalizePhone(rawPhone);
   const tag = getTag(tagId);
-  if (!phone) throw new Error('Noto\'g\'ri telefon');
   if (!tag) throw new Error(`Noma\'lum teg: ${tagId}`);
+  return addClientTagInternal(rawPhone, tagId, tag.label, actor, extras);
+}
+
+export function addClientTagFreeform(rawPhone, label, actor, extras = null) {
+  const trimmed = String(label || '').trim();
+  if (!trimmed) throw new Error('Тег не может быть пустым');
+  const tagId = `custom_${slugify(trimmed)}`;
+  return addClientTagInternal(rawPhone, tagId, trimmed, actor, extras);
+}
+
+function addClientTagInternal(rawPhone, tagId, label, actor, extras = null) {
+  const phone = resolvePhoneKey(rawPhone);
+  if (!phone) throw new Error('Noto\'g\'ri telefon');
 
   const photo = extras?.photo || null;
   const note = extras?.note ? String(extras.note).trim() : '';
@@ -336,7 +353,7 @@ export function addClientTag(rawPhone, tagId, actor, extras = null) {
   const existing = emp.tags.find(t => t.id === tagId);
 
   if (existing) {
-    existing.label = tag.label;
+    existing.label = label;
     existing.assignedAt = now;
     existing.assignedBy = actor?.id ?? null;
     existing.assignedByName = actor?.name || '';
@@ -345,7 +362,7 @@ export function addClientTag(rawPhone, tagId, actor, extras = null) {
   } else {
     const entry = {
       id: tagId,
-      label: tag.label,
+      label,
       assignedAt: now,
       assignedBy: actor?.id ?? null,
       assignedByName: actor?.name || '',
@@ -362,7 +379,7 @@ export function addClientTag(rawPhone, tagId, actor, extras = null) {
 
   const historyEntry = {
     id: tagId,
-    label: tag.label,
+    label,
     action,
     at: now,
     by: actor?.id ?? null,
@@ -379,14 +396,14 @@ export function addClientTag(rawPhone, tagId, actor, extras = null) {
 }
 
 export function removeClientTag(rawPhone, tagId, actor) {
-  const phone = normalizePhone(rawPhone);
-  const tag = getTag(tagId);
+  const phone = resolvePhoneKey(rawPhone);
   if (!phone) throw new Error('Noto\'g\'ri telefon');
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
   const now = new Date().toISOString();
-  const label = tag?.label || tagId;
+  const existing = emp.tags.find(t => t.id === tagId);
+  const label = existing?.label || getTag(tagId)?.label || tagId;
 
   emp.tags = emp.tags.filter(t => t.id !== tagId);
   pushTagHistory(emp, {
@@ -410,39 +427,6 @@ export function getClientTag(emp, tagId) {
 
 export function hasClientTag(emp, tagId) {
   return (emp.tags || []).some(t => t.id === tagId);
-}
-
-export function addEmployeeCard(rawPhone, rawCard) {
-  const phone = resolvePhoneKey(rawPhone);
-  const card = normalizeCard(rawCard);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
-  if (!card) throw new Error('Noto\'g\'ri karta raqami');
-
-  const all = readEmployees();
-  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
-  if (!emp.allowedCards.includes(card)) {
-    emp.allowedCards.push(card);
-    emp.allowedCards.sort();
-  }
-  emp.updatedAt = new Date().toISOString();
-  all[phone] = emp;
-  writeEmployees(all);
-  return card;
-}
-
-export function removeEmployeeCard(rawPhone, rawCard) {
-  const phone = resolvePhoneKey(rawPhone);
-  const card = normalizeCard(rawCard);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
-  if (!card) throw new Error('Noto\'g\'ri karta raqami');
-
-  const all = readEmployees();
-  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
-  emp.allowedCards = emp.allowedCards.filter(c => c !== card);
-  emp.updatedAt = new Date().toISOString();
-  all[phone] = emp;
-  writeEmployees(all);
-  return card;
 }
 
 export function isCardAllowed(rawPhone, rawCard) {
@@ -547,9 +531,9 @@ export function publicEmployee(emp, phoneMasked) {
   const kycStatus = emp.kycStatus || 'none';
   return {
     fullName: emp.fullName,
-    position: emp.position,
-    department: emp.department,
-    tenure: emp.tenure,
+    position: FIXED_POSITION,
+    age: emp.age ?? '',
+    maritalStatus: emp.maritalStatus ?? '',
     employeeId: emp.employeeId,
     advanceBalance: emp.advanceBalance,
     phone: phoneMasked,
