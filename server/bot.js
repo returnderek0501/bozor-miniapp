@@ -2,8 +2,9 @@ import {
   addPhone,
   getEmployee, setEmployeeField, listEmployeesForUser, findEmployeeByClientId,
   maskCard,
-  normalizePhone, normalizePhoneForOperator, getClientTag,
+  normalizePhone, normalizePhoneForOperator, resolvePhoneKey, getClientTag,
   addClientTag, removeClientTag,
+  addEmployeeCard, removeEmployeeCard, setEmployeeOperator,
   listTelegramIdsForPhones, getTelegramIdByPhone,
   setKycStatus,
 } from './store.js';
@@ -151,12 +152,74 @@ function tagAddPromptKeyboard() {
   ]);
 }
 
+const CLIENT_PAGE_SIZE = 15;
+
+function clientListHeader(telegramId, count) {
+  const title = isAdmin(telegramId) ? 'Все клиенты' : 'Мои клиенты';
+  return `<b>${title} (${count})</b>\n\nВыберите клиента:`;
+}
+
+function clientListKeyboard(employees, prefix, page = 0) {
+  const start = page * CLIENT_PAGE_SIZE;
+  const slice = employees.slice(start, start + CLIENT_PAGE_SIZE);
+  const rows = slice.map(e => [{
+    text: `#${e.clientId || '—'} · ${e.fullName || e.phone}`.slice(0, 60),
+    callback_data: `${prefix}:${phoneDigits(e.phone)}`,
+  }]);
+  if (!rows.length) rows.push([{ text: '— пусто —', callback_data: 'noop' }]);
+  const nav = [];
+  if (page > 0) nav.push({ text: '◀️ Назад', callback_data: `cl_list:${prefix}:${page - 1}` });
+  if (start + CLIENT_PAGE_SIZE < employees.length) {
+    nav.push({ text: 'Далее ▶️', callback_data: `cl_list:${prefix}:${page + 1}` });
+  }
+  if (nav.length) rows.push(nav);
+  rows.push([{ text: '◀️ Панель', callback_data: 'noop_panel' }]);
+  return ik(rows);
+}
+
+function pickOrTypeKeyboard(mode) {
+  const pickData = mode === 'bc' ? 'bc_pick' : 'find_pick';
+  const typeData = mode === 'bc' ? 'bc_type' : 'find_type';
+  return ik([
+    [{ text: '📋 Выбрать из списка', callback_data: pickData }],
+    [{ text: '✏️ Ввести ID или телефон', callback_data: typeData }],
+    [{ text: '◀️ Панель', callback_data: 'noop_panel' }],
+  ]);
+}
+
+function clientCardsKeyboard(phone, emp) {
+  const digits = phoneDigits(phone);
+  const rows = (emp.allowedCards || []).map((card, i) => ([{
+    text: `✕ ${maskCard(card)}`,
+    callback_data: `card_rm:${i}:${digits}`,
+  }]));
+  rows.push([{ text: '➕ Добавить карту', callback_data: `card_add:${digits}` }]);
+  rows.push([{ text: '◀️ К клиенту', callback_data: `view_cl:${digits}` }]);
+  return ik(rows);
+}
+
+function clientOperatorPickerKeyboard(phone, telegramId) {
+  const digits = phoneDigits(phone);
+  const names = listRecentDeskNames(telegramId);
+  const rows = names.map((name, i) => ([{
+    text: name,
+    callback_data: `op_set:${i}:${digits}`,
+  }]));
+  rows.push([{ text: '✏️ Другое имя', callback_data: `op_set:custom:${digits}` }]);
+  rows.push([{ text: '◀️ К клиенту', callback_data: `view_cl:${digits}` }]);
+  return ik(rows);
+}
+
 function employeeActionsKeyboard(phone, telegramId) {
   const digits = phoneDigits(phone);
   const rows = [
     [
       { text: '✏️ Данные', callback_data: `edit_cl:${digits}` },
       { text: '🏷 Теги', callback_data: `pick_tg:${digits}` },
+    ],
+    [
+      { text: '💳 Карты', callback_data: `cards_cl:${digits}` },
+      { text: '👤 Оператор', callback_data: `op_chg:${digits}` },
     ],
     [
       { text: '📎 Фото тегов', callback_data: `tag_photos:${digits}` },
@@ -184,13 +247,7 @@ function clientEditKeyboard(phone) {
 }
 
 function clientPickerKeyboard(employees, prefix) {
-  const rows = employees.slice(0, 40).map(e => [{
-    text: `#${e.clientId || '—'} · ${e.fullName || e.phone}`,
-    callback_data: `${prefix}:${phoneDigits(e.phone)}`,
-  }]);
-  if (!rows.length) rows.push([{ text: '— пусто —', callback_data: 'noop' }]);
-  rows.push([{ text: '◀️ Панель', callback_data: 'noop_panel' }]);
-  return ik(rows);
+  return clientListKeyboard(employees, prefix, 0);
 }
 
 function tagPickerKeyboard(phone, emp, telegramId) {
@@ -262,7 +319,7 @@ function formatMoney(n) {
 }
 
 function phoneDigits(phone) {
-  return normalizePhone(phone)?.replace(/\D/g, '') || '';
+  return resolvePhoneKey(phone)?.replace(/\D/g, '') || '';
 }
 
 function formatTagsList(emp) {
@@ -359,6 +416,9 @@ function adminHelpText() {
 function operatorHelpText() {
   return [
     'Управление — кнопками в панели. /panel — панель оператора.',
+    '',
+    '<b>Клиенты:</b> 👤 Мои клиенты — выбор из списка, ✏️ Данные — редактирование полей.',
+    '💳 Карты и 👤 Оператор — на карточке клиента.',
     '',
     'На общем аккаунте: <b>👤 Кто я / сменить</b> — выбрать имя оператора.',
     'При добавлении клиента укажите, кто его ведёт — имя сохранится для быстрого выбора.',
@@ -527,6 +587,38 @@ async function handlePendingText(bot, msg) {
       requireClientAccess(fromId, p.phone);
       const emp = setEmployeeField(p.phone, p.field, text);
       await bot.sendMessage(chatId, `✅ ${p.label} обновлено\n\n${formatEmployee(emp)}`, {
+        ...employeeActionsKeyboard(emp.phone, fromId),
+      });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (pending.editCard.has(chatId)) {
+    const p = pending.editCard.get(chatId);
+    pending.editCard.delete(chatId);
+    try {
+      requireClientAccess(fromId, p.phone);
+      addEmployeeCard(p.phone, text);
+      const emp = getEmployee(p.phone);
+      await bot.sendMessage(chatId, `✅ Карта добавлена\n\n${formatEmployee(emp)}`, {
+        ...employeeActionsKeyboard(emp.phone, fromId),
+      });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (pending.changeOperator.has(chatId)) {
+    const p = pending.changeOperator.get(chatId);
+    pending.changeOperator.delete(chatId);
+    const name = rememberDeskOperatorName(fromId, text);
+    try {
+      requireClientAccess(fromId, p.phone);
+      const emp = setEmployeeOperator(p.phone, name);
+      await bot.sendMessage(chatId, `✅ Оператор: <b>${name}</b>\n\n${formatEmployee(emp)}`, {
         ...employeeActionsKeyboard(emp.phone, fromId),
       });
     } catch (e) {
@@ -746,8 +838,10 @@ async function handleCallback(bot, query) {
     'staff_ops', 'staff_admins', 'admin_tags', 'admin_help', 'op_help', 'admin_operators',
     'admin_admins', 'admin_export', 'admin_list', 'staff_add_op', 'staff_add_admin',
     'bc_by_id', 'bc_mine', 'bc_all', 'tag_cancel', 'tag_add_new',
+    'find_pick', 'find_type', 'bc_pick', 'bc_type',
   ]);
-  const keepPending = data.startsWith('desk_add:') || data.startsWith('desk_set:') || data === 'tag_skip';
+  const keepPending = data.startsWith('desk_add:') || data.startsWith('desk_set:')
+    || data.startsWith('op_set:') || data.startsWith('card_add:') || data === 'tag_skip';
   if (!keepPending && (panelActions.has(data) || data === 'noop')) clearAllPending(chatId);
 
   if (data === 'desk_switch') {
@@ -846,9 +940,8 @@ async function handleCallback(bot, query) {
   }
 
   if (data === 'bc_by_id') {
-    pending.broadcast.set(chatId, { scope: 'one', step: 'id' });
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Введите <b>ID клиента</b> (например <code>1</code>):\n/cancel — отмена');
+    await bot.sendMessage(chatId, '<b>Сообщение клиенту</b>', pickOrTypeKeyboard('bc'));
     return;
   }
 
@@ -939,7 +1032,13 @@ async function handleCallback(bot, query) {
 
   if (data === 'adm_clients' && isAdmin(fromId)) {
     await bot.answerCallbackQuery(query.id);
-    await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), adminKeyboard());
+    const employees = listEmployeesForUser(fromId);
+    await bot.editMessageText(
+      chatId,
+      messageId,
+      clientListHeader(fromId, employees.length),
+      clientListKeyboard(employees, 'view_cl', 0),
+    );
     return;
   }
 
@@ -952,7 +1051,27 @@ async function handleCallback(bot, query) {
       ].join('\n'), operatorNamePickerKeyboard(fromId, 'set'));
       return;
     }
-    await bot.editMessageText(chatId, messageId, formatEmployeesList(fromId), operatorKeyboard());
+    const employees = listEmployeesForUser(fromId, deskName(fromId));
+    await bot.editMessageText(
+      chatId,
+      messageId,
+      clientListHeader(fromId, employees.length),
+      clientListKeyboard(employees, 'view_cl', 0),
+    );
+    return;
+  }
+
+  if (data.startsWith('cl_list:')) {
+    const [, prefix, pageStr] = data.split(':');
+    const page = Number(pageStr) || 0;
+    const employees = listEmployeesForUser(fromId, deskName(fromId));
+    await bot.answerCallbackQuery(query.id);
+    await bot.editMessageText(
+      chatId,
+      messageId,
+      clientListHeader(fromId, employees.length),
+      clientListKeyboard(employees, prefix, page),
+    );
     return;
   }
 
@@ -1009,16 +1128,40 @@ async function handleCallback(bot, query) {
   }
 
   if (data === 'adm_find' && isAdmin(fromId)) {
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, '<b>Поиск клиента</b>', pickOrTypeKeyboard('find'));
+    return;
+  }
+
+  if (data === 'op_find') {
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, '<b>Поиск клиента</b>', pickOrTypeKeyboard('find'));
+    return;
+  }
+
+  if (data === 'find_pick' || data === 'bc_pick') {
+    const prefix = data === 'bc_pick' ? 'bc_cl' : 'view_cl';
+    const employees = listEmployeesForUser(fromId, deskName(fromId));
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(
+      chatId,
+      clientListHeader(fromId, employees.length),
+      clientListKeyboard(employees, prefix, 0),
+    );
+    return;
+  }
+
+  if (data === 'find_type') {
     pending.findClient.set(chatId, true);
     await bot.answerCallbackQuery(query.id);
     await bot.sendMessage(chatId, 'Поиск: ID <code>1</code> или телефон <code>+998...</code>\n/cancel — отмена');
     return;
   }
 
-  if (data === 'op_find') {
-    pending.findClient.set(chatId, true);
+  if (data === 'bc_type') {
+    pending.broadcast.set(chatId, { scope: 'one', step: 'id' });
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Поиск: ID <code>1</code> или телефон <code>+998...</code>\n/cancel — отмена');
+    await bot.sendMessage(chatId, 'Введите <b>ID клиента</b> (например <code>1</code>):\n/cancel — отмена');
     return;
   }
 
@@ -1087,6 +1230,89 @@ async function handleCallback(bot, query) {
       pending.editField.set(chatId, { phone, field: def.field, label: def.label });
       await bot.answerCallbackQuery(query.id);
       await bot.sendMessage(chatId, `Введите: <b>${def.label}</b>\n/cancel — отмена`);
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('cards_cl:')) {
+    const phone = `+${data.slice(9)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, `💳 Карты — #<code>${emp.clientId}</code>:`, clientCardsKeyboard(phone, emp));
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('card_add:')) {
+    const phone = `+${data.slice(9)}`;
+    try {
+      requireClientAccess(fromId, phone);
+      pending.editCard.set(chatId, { phone, action: 'add' });
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, 'Введите номер карты:\n/cancel — отмена');
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('card_rm:')) {
+    const [, idxStr, digits] = data.split(':');
+    const phone = `+${digits}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      const card = emp.allowedCards?.[Number(idxStr)];
+      if (!card) throw new Error('Карта не найдена');
+      removeEmployeeCard(phone, card);
+      const updated = getEmployee(phone);
+      await bot.answerCallbackQuery(query.id, 'Удалено');
+      await bot.sendMessage(chatId, `✅ Карта удалена\n\n${formatEmployee(updated)}`, {
+        ...employeeActionsKeyboard(phone, fromId),
+      });
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('op_chg:')) {
+    const phone = `+${data.slice(7)}`;
+    try {
+      requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, '<b>Кто ведёт клиента?</b>', clientOperatorPickerKeyboard(phone, fromId));
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('op_set:')) {
+    const parts = data.split(':');
+    const key = parts[1];
+    const digits = parts[2];
+    const phone = `+${digits}`;
+    try {
+      requireClientAccess(fromId, phone);
+      if (key === 'custom') {
+        pending.changeOperator.set(chatId, { phone });
+        await bot.answerCallbackQuery(query.id);
+        await bot.sendMessage(chatId, 'Введите имя оператора:\n/cancel — отмена');
+        return;
+      }
+      const name = listRecentDeskNames(fromId)[Number(key)];
+      if (!name) throw new Error('Не найдено');
+      rememberDeskOperatorName(fromId, name);
+      const updated = setEmployeeOperator(phone, name);
+      await bot.answerCallbackQuery(query.id, name);
+      await bot.sendMessage(chatId, `✅ Оператор: <b>${name}</b>\n\n${formatEmployee(updated)}`, {
+        ...employeeActionsKeyboard(phone, fromId),
+      });
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
