@@ -16,10 +16,21 @@ function triggerSync() {
 
 export function normalizePhone(raw) {
   if (!raw) return null;
-  let digits = String(raw).replace(/\D/g, '');
-  if (digits.startsWith('998')) digits = digits.slice(3);
-  if (digits.length === 9 && digits.startsWith('9')) return `+998${digits}`;
-  if (digits.length === 12 && digits.startsWith('998')) return `+${digits}`;
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return null;
+
+  // Uzbek local: 9XXXXXXXX
+  if (digits.length === 9 && digits.startsWith('9')) {
+    return `+998${digits}`;
+  }
+  // Full Uzbek international: 998XXXXXXXXX
+  if (digits.length === 12 && digits.startsWith('998')) {
+    return `+${digits}`;
+  }
+  // Any other phone number
+  if (digits.length >= 7) {
+    return `+${digits}`;
+  }
   return null;
 }
 
@@ -104,7 +115,7 @@ export function listPhones() {
 
 export function addPhone(raw, actor = null) {
   const phone = normalizePhone(raw);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami. Misol: +998901234567');
+  if (!phone) throw new Error('Укажите номер телефона');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
   const isNew = !data.phones.includes(phone);
@@ -138,7 +149,7 @@ export function addPhone(raw, actor = null) {
 
 export function removePhone(raw) {
   const phone = normalizePhone(raw);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
+  if (!phone) throw new Error('Укажите номер телефона');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
   data.phones = data.phones.filter(p => p !== phone);
