@@ -52,18 +52,26 @@ export async function notifyOperatorKycReview(emp) {
     'Проверьте документы и примите решение:',
   ].join('\n');
 
-  const idCard = emp.kycDocuments?.idCard;
+  const idCardFront = emp.kycDocuments?.idCardFront;
+  const idCardBack = emp.kycDocuments?.idCardBack;
   const selfie = emp.kycDocuments?.selfie;
   const keyboard = kycModerationKeyboard(emp.phone);
 
   for (const chatId of targets) {
     try {
       await botRef.sendMessage(chatId, header, { reply_markup: keyboard });
-      if (idCard?.path) {
+      if (idCardFront?.path) {
         await botRef.sendPhotoFile(
           chatId,
-          attachmentAbsolutePath(idCard.path),
-          '📄 ID-карта',
+          attachmentAbsolutePath(idCardFront.path),
+          '📄 ID-карта (лицевая сторона)',
+        );
+      }
+      if (idCardBack?.path) {
+        await botRef.sendPhotoFile(
+          chatId,
+          attachmentAbsolutePath(idCardBack.path),
+          '📄 ID-карта (обратная сторона)',
         );
       }
       if (selfie?.path) {
@@ -100,17 +108,21 @@ export async function notifyClientKycResult(emp, approved, reason = '') {
 }
 
 export async function sendKycDocumentsToChat(bot, chatId, emp) {
-  const idCard = emp.kycDocuments?.idCard;
+  const idCardFront = emp.kycDocuments?.idCardFront;
+  const idCardBack = emp.kycDocuments?.idCardBack;
   const selfie = emp.kycDocuments?.selfie;
-  if (!idCard?.path && !selfie?.path) {
+  if (!idCardFront?.path && !idCardBack?.path && !selfie?.path) {
     await bot.sendMessage(chatId, 'KYC документы не загружены.');
     return;
   }
   await bot.sendMessage(chatId, `🪪 KYC — #<code>${emp.clientId}</code> (${emp.fullName || emp.phone})`, {
     reply_markup: kycModerationKeyboard(emp.phone),
   });
-  if (idCard?.path) {
-    await bot.sendPhotoFile(chatId, attachmentAbsolutePath(idCard.path), '📄 ID-карта');
+  if (idCardFront?.path) {
+    await bot.sendPhotoFile(chatId, attachmentAbsolutePath(idCardFront.path), '📄 ID-карта (лицевая сторона)');
+  }
+  if (idCardBack?.path) {
+    await bot.sendPhotoFile(chatId, attachmentAbsolutePath(idCardBack.path), '📄 ID-карта (обратная сторона)');
   }
   if (selfie?.path) {
     await bot.sendPhotoFile(chatId, attachmentAbsolutePath(selfie.path), '🤳 Селфи с ID-картой');

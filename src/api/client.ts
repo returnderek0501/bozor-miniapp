@@ -85,11 +85,15 @@ export async function fetchCabinet(): Promise<EmployeeProfile> {
   return res.json();
 }
 
-export async function submitKyc(idCard: string, selfie: string): Promise<KycSubmitResult> {
+export async function submitKyc(
+  idCardFront: string,
+  idCardBack: string,
+  selfie: string,
+): Promise<KycSubmitResult> {
   const res = await fetch('/api/kyc/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ idCard, selfie }),
+    body: JSON.stringify({ idCardFront, idCardBack, selfie }),
   });
   const data = await res.json();
   if (!res.ok) {

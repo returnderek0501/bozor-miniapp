@@ -19,11 +19,14 @@ function kycStatusKey(status?: string) {
   return 'kyc.statusNone';
 }
 
+type KycFileType = 'idFront' | 'idBack' | 'selfie';
+
 export function DocumentsScreen() {
   const { t } = useTranslation();
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [idCardPreview, setIdCardPreview] = useState('');
+  const [idCardFrontPreview, setIdCardFrontPreview] = useState('');
+  const [idCardBackPreview, setIdCardBackPreview] = useState('');
   const [selfiePreview, setSelfiePreview] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -43,30 +46,32 @@ export function DocumentsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleFile = async (file: File | undefined, type: 'id' | 'selfie') => {
+  const handleFile = async (file: File | undefined, type: KycFileType) => {
     if (!file || !file.type.startsWith('image/')) {
       setError(t('kyc.invalidFile'));
       return;
     }
     setError('');
     const dataUrl = await readFileAsDataUrl(file);
-    if (type === 'id') setIdCardPreview(dataUrl);
+    if (type === 'idFront') setIdCardFrontPreview(dataUrl);
+    else if (type === 'idBack') setIdCardBackPreview(dataUrl);
     else setSelfiePreview(dataUrl);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!idCardPreview || !selfiePreview) {
-      setError(t('kyc.needBoth'));
+    if (!idCardFrontPreview || !idCardBackPreview || !selfiePreview) {
+      setError(t('kyc.needAll'));
       return;
     }
     setSubmitting(true);
-    const result = await submitKyc(idCardPreview, selfiePreview);
+    const result = await submitKyc(idCardFrontPreview, idCardBackPreview, selfiePreview);
     setSubmitting(false);
     if (result.success) {
       setSuccess(true);
-      setIdCardPreview('');
+      setIdCardFrontPreview('');
+      setIdCardBackPreview('');
       setSelfiePreview('');
       await load();
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
@@ -112,15 +117,28 @@ export function DocumentsScreen() {
       {canSubmit && (
         <form className="documents__form" onSubmit={handleSubmit}>
           <label className="documents__upload">
-            <span>{t('kyc.idCard')}</span>
+            <span>{t('kyc.idCardFront')}</span>
             <input
               type="file"
               accept="image/*"
               capture="environment"
-              onChange={e => handleFile(e.target.files?.[0], 'id')}
+              onChange={e => handleFile(e.target.files?.[0], 'idFront')}
             />
-            {idCardPreview
-              ? <img src={idCardPreview} alt="" className="documents__preview" />
+            {idCardFrontPreview
+              ? <img src={idCardFrontPreview} alt="" className="documents__preview" />
+              : <span className="documents__placeholder-btn">{t('kyc.upload')}</span>}
+          </label>
+
+          <label className="documents__upload">
+            <span>{t('kyc.idCardBack')}</span>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={e => handleFile(e.target.files?.[0], 'idBack')}
+            />
+            {idCardBackPreview
+              ? <img src={idCardBackPreview} alt="" className="documents__preview" />
               : <span className="documents__placeholder-btn">{t('kyc.upload')}</span>}
           </label>
 

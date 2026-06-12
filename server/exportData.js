@@ -25,7 +25,8 @@ export const HEADERS_MAIN = [
   'KYC подано',
   'KYC проверено',
   'KYC проверил',
-  'KYC ID-карта',
+  'KYC ID-карта (лицевая)',
+  'KYC ID-карта (обратная)',
   'KYC селфи',
   'KYC причина отказа',
 ];
@@ -39,7 +40,8 @@ export const HEADERS_KYC = [
   'Подано',
   'Проверено',
   'Проверил',
-  'Файл ID-карты',
+  'Файл ID-карты (лицевая)',
+  'Файл ID-карты (обратная)',
   'Файл селфи',
   'Причина отказа',
 ];
@@ -94,7 +96,8 @@ export function rowFromEmployee(emp) {
     emp.kycSubmittedAt ? formatTagTime(emp.kycSubmittedAt) : '',
     emp.kycReviewedAt ? formatTagTime(emp.kycReviewedAt) : '',
     emp.kycReviewedByName || '',
-    emp.kycDocuments?.idCard?.path || '',
+    emp.kycDocuments?.idCardFront?.path || '',
+    emp.kycDocuments?.idCardBack?.path || '',
     emp.kycDocuments?.selfie?.path || '',
     emp.kycRejectionReason || '',
   ];
@@ -156,7 +159,8 @@ export function kycRows(employees) {
       emp.kycSubmittedAt ? formatTagTime(emp.kycSubmittedAt) : '',
       emp.kycReviewedAt ? formatTagTime(emp.kycReviewedAt) : '',
       emp.kycReviewedByName || '',
-      emp.kycDocuments?.idCard?.path || '',
+      emp.kycDocuments?.idCardFront?.path || '',
+    emp.kycDocuments?.idCardBack?.path || '',
       emp.kycDocuments?.selfie?.path || '',
       emp.kycRejectionReason || '',
     ])
