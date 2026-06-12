@@ -23,6 +23,21 @@ export function normalizePhone(raw) {
   return null;
 }
 
+/** Для оператора/админа при добавлении клиента: любой номер с кодом +998 */
+export function normalizePhoneForOperator(raw) {
+  if (!raw) return null;
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return null;
+
+  if (digits.startsWith('998')) {
+    const local = digits.slice(3);
+    if (!local) return null;
+    return `+998${local}`;
+  }
+
+  return `+998${digits}`;
+}
+
 export function normalizeCard(raw) {
   if (!raw) return null;
   const digits = String(raw).replace(/\D/g, '');
@@ -110,8 +125,8 @@ export function listPhones() {
 }
 
 export function addPhone(raw, actor = null) {
-  const phone = normalizePhone(raw);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami. Misol: +998901234567');
+  const phone = normalizePhoneForOperator(raw);
+  if (!phone) throw new Error('Noto\'g\'ri telefon raqami. Raqam +998 kodini o\'z ichiga olishi kerak. Misol: +998901234567');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
   const isNew = !data.phones.includes(phone);
@@ -144,7 +159,7 @@ export function addPhone(raw, actor = null) {
 }
 
 export function removePhone(raw) {
-  const phone = normalizePhone(raw);
+  const phone = normalizePhone(raw) || normalizePhoneForOperator(raw);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
 
   const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
@@ -213,7 +228,7 @@ function writeEmployees(all) {
 }
 
 export function getEmployee(rawPhone) {
-  const phone = normalizePhone(rawPhone);
+  const phone = normalizePhone(rawPhone) || normalizePhoneForOperator(rawPhone);
   if (!phone) return null;
   const all = readEmployees();
   if (!all[phone]) {
