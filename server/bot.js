@@ -23,7 +23,7 @@ import {
   createBroadcastRequest, approveBroadcast, markBroadcastSent,
   resolveBroadcastRecipients, formatBroadcastApproval,
 } from './broadcasts.js';
-import { CLIENT_EDIT_FIELDS } from './clientFields.js';
+import { CLIENT_EDIT_FIELDS, clientListButtonLabel, isClientProfileComplete } from './clientFields.js';
 import {
   getActiveDeskOperator, listRecentDeskNames, rememberDeskOperatorName, enrichActorWithDesk,
 } from './deskOperators.js';
@@ -153,16 +153,25 @@ function tagAddPromptKeyboard() {
 
 const CLIENT_PAGE_SIZE = 15;
 
-function clientListHeader(telegramId, count) {
+function clientListHeader(telegramId, count, { allowIdInput = false, incompleteCount = 0 } = {}) {
   const title = isAdmin(telegramId) ? 'Все клиенты' : 'Мои клиенты';
-  return `<b>${title} (${count})</b>\n\nВыберите клиента:`;
+  const lines = [`<b>${title} (${count})</b>`, '', 'Выберите клиента кнопкой'];
+  if (allowIdInput) {
+    lines.push('или отправьте <b>ID клиента</b> (например <code>5</code>).');
+  } else {
+    lines.push('ниже:');
+  }
+  if (incompleteCount > 0) {
+    lines.push('', `⚠️ Недозаполненных: <b>${incompleteCount}</b> (помечены ⚠️)`);
+  }
+  return lines.join('\n');
 }
 
 function clientListKeyboard(employees, prefix, page = 0) {
   const start = page * CLIENT_PAGE_SIZE;
   const slice = employees.slice(start, start + CLIENT_PAGE_SIZE);
   const rows = slice.map(e => [{
-    text: `#${e.clientId || '—'} · ${e.fullName || e.phone}`.slice(0, 60),
+    text: clientListButtonLabel(e),
     callback_data: `${prefix}:${phoneDigits(e.phone)}`,
   }]);
   if (!rows.length) rows.push([{ text: '— пусто —', callback_data: 'noop' }]);
@@ -400,7 +409,8 @@ function operatorHelpText() {
   return [
     'Управление — кнопками в панели. /panel — панель оператора.',
     '',
-    '<b>Клиенты:</b> 👤 Мои клиенты — выбор из списка, ✏️ Данные — редактирование полей.',
+    '<b>Клиенты:</b> 👤 Мои клиенты — выбор кнопкой или отправка ID.',
+    '⚠️ — недозаполненный профиль (имя, возраст, сем. положение, ID кабинета).',
     '👤 Оператор — смена на карточке клиента.',
     '',
     'На общем аккаунте: <b>👤 Кто я / сменить</b> — выбрать имя оператора.',
@@ -427,6 +437,20 @@ function resolveClientQuery(query, telegramId) {
   if (!emp?.phone) throw new Error('Клиент не найден');
   if (!canViewClient(telegramId, emp, deskName(telegramId))) throw new Error('Нет доступа');
   return emp;
+}
+
+function resolveClientQueryForList(query, telegramId) {
+  const q = String(query || '').trim();
+  let emp = null;
+  if (/^\d+$/.test(q) || /^CLT-/i.test(q)) {
+    emp = findEmployeeByClientId(q);
+  } else {
+    emp = getEmployee(q);
+  }
+  if (!emp?.phone) throw new Error('Клиент не найден');
+  if (canViewClient(telegramId, emp, deskName(telegramId))) return emp;
+  const opName = emp.operator || emp.createdByName || 'другим оператором';
+  throw new Error(`Это клиент, закреплённый за оператором <b>${opName}</b>, а не за вами.`);
 }
 
 function requireClientAccess(fromId, phone) {
@@ -635,6 +659,19 @@ async function handlePendingText(bot, msg) {
     pending.findClient.delete(chatId);
     try {
       const emp = resolveClientQuery(text, fromId);
+      await bot.sendMessage(chatId, formatEmployee(emp), {
+        ...employeeActionsKeyboard(emp.phone, fromId),
+      });
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (pending.clientList.has(chatId)) {
+    try {
+      const emp = resolveClientQueryForList(text, fromId);
+      pending.clientList.delete(chatId);
       await bot.sendMessage(chatId, formatEmployee(emp), {
         ...employeeActionsKeyboard(emp.phone, fromId),
       });
@@ -1000,10 +1037,11 @@ async function handleCallback(bot, query) {
   if (data === 'adm_clients' && isAdmin(fromId)) {
     await bot.answerCallbackQuery(query.id);
     const employees = listEmployeesForUser(fromId);
+    const incompleteCount = employees.filter(e => !isClientProfileComplete(e)).length;
     await bot.editMessageText(
       chatId,
       messageId,
-      clientListHeader(fromId, employees.length),
+      clientListHeader(fromId, employees.length, { incompleteCount }),
       clientListKeyboard(employees, 'view_cl', 0),
     );
     return;
@@ -1019,10 +1057,12 @@ async function handleCallback(bot, query) {
       return;
     }
     const employees = listEmployeesForUser(fromId, deskName(fromId));
+    const incompleteCount = employees.filter(e => !isClientProfileComplete(e)).length;
+    pending.clientList.set(chatId, true);
     await bot.editMessageText(
       chatId,
       messageId,
-      clientListHeader(fromId, employees.length),
+      clientListHeader(fromId, employees.length, { allowIdInput: true, incompleteCount }),
       clientListKeyboard(employees, 'view_cl', 0),
     );
     return;
@@ -1032,11 +1072,13 @@ async function handleCallback(bot, query) {
     const [, prefix, pageStr] = data.split(':');
     const page = Number(pageStr) || 0;
     const employees = listEmployeesForUser(fromId, deskName(fromId));
+    const allowIdInput = pending.clientList.has(chatId);
+    const incompleteCount = employees.filter(e => !isClientProfileComplete(e)).length;
     await bot.answerCallbackQuery(query.id);
     await bot.editMessageText(
       chatId,
       messageId,
-      clientListHeader(fromId, employees.length),
+      clientListHeader(fromId, employees.length, { allowIdInput, incompleteCount }),
       clientListKeyboard(employees, prefix, page),
     );
     return;
@@ -1164,6 +1206,7 @@ async function handleCallback(bot, query) {
     const phone = `+${data.slice(data.indexOf(':') + 1)}`;
     try {
       const emp = requireClientAccess(fromId, phone);
+      pending.clientList.delete(chatId);
       await bot.answerCallbackQuery(query.id);
       if (data.startsWith('pick_tg')) {
         await bot.sendMessage(chatId, `Теги — #<code>${emp.clientId}</code>:`, tagPickerKeyboard(phone, emp, fromId));
