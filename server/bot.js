@@ -1,7 +1,7 @@
 import {
   addPhone,
   getEmployee, setEmployeeField, listEmployeesForUser, findEmployeeByClientId,
-  getClientTag,
+  normalizePhoneForOperator, resolvePhoneKey, getClientTag,
   addClientTag, removeClientTag,
   setEmployeeOperator,
   listTelegramIdsForPhones, getTelegramIdByPhone,
