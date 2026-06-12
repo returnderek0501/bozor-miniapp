@@ -33,6 +33,16 @@ export interface EmployeeProfile {
     card: string;
     at: string;
   } | null;
+  kycStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  kycRejectionReason?: string;
+  kycCanSubmit?: boolean;
+  withdrawAllowed?: boolean;
+}
+
+export interface KycSubmitResult {
+  success: boolean;
+  message?: string;
+  kycStatus?: string;
 }
 
 export interface WithdrawResult {
@@ -73,6 +83,19 @@ export async function fetchCabinet(): Promise<EmployeeProfile> {
   const res = await fetch('/api/cabinet', { headers: authHeaders() });
   if (!res.ok) throw new Error('fetch_failed');
   return res.json();
+}
+
+export async function submitKyc(idCard: string, selfie: string): Promise<KycSubmitResult> {
+  const res = await fetch('/api/kyc/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ idCard, selfie }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    return { success: false, message: data.message };
+  }
+  return data;
 }
 
 export async function requestWithdraw(cardNumber: string, amount?: number): Promise<WithdrawResult> {

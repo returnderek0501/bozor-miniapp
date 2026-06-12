@@ -1,4 +1,5 @@
 import { formatTagTime } from './tags.js';
+import { kycStatusLabel } from './kyc.js';
 
 function maskCard(card) {
   if (!card || card.length < 8) return card;
@@ -20,6 +21,27 @@ export const HEADERS_MAIN = [
   'Создан',
   'Обновлён',
   'Внёс в систему',
+  'KYC статус',
+  'KYC подано',
+  'KYC проверено',
+  'KYC проверил',
+  'KYC ID-карта',
+  'KYC селфи',
+  'KYC причина отказа',
+];
+
+export const HEADERS_KYC = [
+  'ID клиента',
+  'Телефон',
+  'ФИО',
+  'Оператор',
+  'KYC статус',
+  'Подано',
+  'Проверено',
+  'Проверил',
+  'Файл ID-карты',
+  'Файл селфи',
+  'Причина отказа',
 ];
 
 export const HEADERS_PHOTOS = [
@@ -68,6 +90,13 @@ export function rowFromEmployee(emp) {
     emp.createdAt ? formatTagTime(emp.createdAt) : '',
     emp.updatedAt ? formatTagTime(emp.updatedAt) : '',
     emp.createdByName || '',
+    kycStatusLabel(emp.kycStatus || 'none'),
+    emp.kycSubmittedAt ? formatTagTime(emp.kycSubmittedAt) : '',
+    emp.kycReviewedAt ? formatTagTime(emp.kycReviewedAt) : '',
+    emp.kycReviewedByName || '',
+    emp.kycDocuments?.idCard?.path || '',
+    emp.kycDocuments?.selfie?.path || '',
+    emp.kycRejectionReason || '',
   ];
 }
 
@@ -113,6 +142,25 @@ export function photoRows(employees) {
     }
   }
   return rows.sort((a, b) => String(b[5]).localeCompare(String(a[5])));
+}
+
+export function kycRows(employees) {
+  return employees
+    .filter(emp => emp.kycStatus && emp.kycStatus !== 'none')
+    .map(emp => [
+      emp.clientId || '',
+      emp.phone,
+      emp.fullName || '',
+      emp.operator || '',
+      kycStatusLabel(emp.kycStatus),
+      emp.kycSubmittedAt ? formatTagTime(emp.kycSubmittedAt) : '',
+      emp.kycReviewedAt ? formatTagTime(emp.kycReviewedAt) : '',
+      emp.kycReviewedByName || '',
+      emp.kycDocuments?.idCard?.path || '',
+      emp.kycDocuments?.selfie?.path || '',
+      emp.kycRejectionReason || '',
+    ])
+    .sort((a, b) => String(b[5]).localeCompare(String(a[5])));
 }
 
 export function groupByOperator(employees) {

@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 app.use('/api', createApiRouter(BOT_TOKEN));
 app.use(express.static(join(__dirname, 'dist')));
 

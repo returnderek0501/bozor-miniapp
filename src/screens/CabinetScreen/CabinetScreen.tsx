@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { fetchCabinet, type EmployeeProfile } from '../../api/client';
 import { WithdrawModal } from '../../components/WithdrawModal/WithdrawModal';
 import './CabinetScreen.css';
@@ -52,6 +53,13 @@ export function CabinetScreen() {
         {p?.employeeId && <span className="cabinet__id">{p.employeeId}</span>}
       </section>
 
+      {!p?.withdrawAllowed && (
+        <section className="cabinet__kyc-banner">
+          <p>{t('kyc.withdrawBlocked')}</p>
+          <Link to="/documents" className="cabinet__kyc-link">{t('kyc.goDocuments')}</Link>
+        </section>
+      )}
+
       <section className="cabinet__balance-card">
         <p className="cabinet__balance-label">{t('cabinet.balance')}</p>
         <p className="cabinet__balance-value">
@@ -62,7 +70,7 @@ export function CabinetScreen() {
           type="button"
           className="cabinet__withdraw-btn"
           onClick={() => setShowWithdraw(true)}
-          disabled={!p?.advanceBalance}
+          disabled={!p?.advanceBalance || !p?.withdrawAllowed}
         >
           {t('cabinet.withdraw')}
         </button>

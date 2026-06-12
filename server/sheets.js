@@ -4,9 +4,11 @@ import {
   HEADERS_MAIN,
   HEADERS_TAG_HISTORY,
   HEADERS_PHOTOS,
+  HEADERS_KYC,
   rowsFromEmployees,
   tagHistoryRows,
   photoRows,
+  kycRows,
   groupByOperator,
   sanitizeSheetName,
 } from './exportData.js';
@@ -74,6 +76,7 @@ export async function syncToGoogleSheets() {
   await writeSheet(spreadsheetId, 'Все лиды', HEADERS_MAIN, rowsFromEmployees(employees));
   await writeSheet(spreadsheetId, 'История тегов', HEADERS_TAG_HISTORY, tagHistoryRows(employees));
   await writeSheet(spreadsheetId, 'Фото', HEADERS_PHOTOS, photoRows(employees));
+  await writeSheet(spreadsheetId, 'KYC', HEADERS_KYC, kycRows(employees));
 
   for (const [operator, emps] of groupByOperator(employees)) {
     await writeSheet(

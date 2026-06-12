@@ -57,6 +57,13 @@ function defaultEmployee(phone) {
     createdAt: null,
     createdBy: null,
     createdByName: '',
+    kycStatus: 'none',
+    kycSubmittedAt: null,
+    kycReviewedAt: null,
+    kycReviewedBy: null,
+    kycReviewedByName: '',
+    kycRejectionReason: '',
+    kycDocuments: { idCard: null, selfie: null },
     updatedAt: new Date().toISOString(),
   };
 }
@@ -85,6 +92,8 @@ function migrateEmployee(emp) {
   if (!emp.tags) emp.tags = [];
   if (!emp.tagHistory) emp.tagHistory = [];
   if (!emp.clientId) assignClientIdIfMissing(emp);
+  if (!emp.kycStatus) emp.kycStatus = 'none';
+  if (!emp.kycDocuments) emp.kycDocuments = { idCard: null, selfie: null };
   return emp;
 }
 
@@ -416,6 +425,61 @@ export function isCardAllowed(rawPhone, rawCard) {
   return getEmployee(phone).allowedCards.includes(card);
 }
 
+export function isKycApproved(rawPhone) {
+  const emp = getEmployee(rawPhone);
+  return emp?.kycStatus === 'approved';
+}
+
+export function submitKyc(rawPhone, documents) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) throw new Error('INVALID_DATA');
+
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  if (emp.kycStatus === 'pending') throw new Error('KYC_PENDING');
+  if (emp.kycStatus === 'approved') throw new Error('KYC_ALREADY_APPROVED');
+  if (!documents?.idCard?.path || !documents?.selfie?.path) throw new Error('KYC_DOCUMENTS_REQUIRED');
+
+  const now = new Date().toISOString();
+  emp.kycDocuments = documents;
+  emp.kycStatus = 'pending';
+  emp.kycSubmittedAt = now;
+  emp.kycRejectionReason = '';
+  emp.kycReviewedAt = null;
+  emp.kycReviewedBy = null;
+  emp.kycReviewedByName = '';
+  emp.updatedAt = now;
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
+}
+
+export function setKycStatus(rawPhone, status, reviewer = null, reason = '') {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) throw new Error('INVALID_DATA');
+  const allowed = new Set(['approved', 'rejected']);
+  if (!allowed.has(status)) throw new Error('INVALID_KYC_STATUS');
+
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  if (emp.kycStatus !== 'pending') throw new Error('KYC_NOT_PENDING');
+
+  const now = new Date().toISOString();
+  emp.kycStatus = status;
+  emp.kycReviewedAt = now;
+  emp.kycReviewedBy = reviewer?.id ?? null;
+  emp.kycReviewedByName = reviewer?.deskOperatorName || reviewer?.name || reviewer?.operatorName || '';
+  if (status === 'rejected') {
+    emp.kycRejectionReason = String(reason || '').trim() || 'Отклонено оператором';
+  } else {
+    emp.kycRejectionReason = '';
+  }
+  emp.updatedAt = now;
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
+}
+
 export function withdrawAdvance(rawPhone, rawCard, amount) {
   const phone = normalizePhone(rawPhone);
   const card = normalizeCard(rawCard);
@@ -424,6 +488,7 @@ export function withdrawAdvance(rawPhone, rawCard, amount) {
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  if (emp.kycStatus !== 'approved') throw new Error('KYC_NOT_APPROVED');
   const sum = amount ? Number(amount) : emp.advanceBalance;
 
   if (Number.isNaN(sum) || sum <= 0) throw new Error('INVALID_AMOUNT');
@@ -450,6 +515,7 @@ export function maskCard(card) {
 }
 
 export function publicEmployee(emp, phoneMasked) {
+  const kycStatus = emp.kycStatus || 'none';
   return {
     fullName: emp.fullName,
     position: emp.position,
@@ -459,5 +525,9 @@ export function publicEmployee(emp, phoneMasked) {
     advanceBalance: emp.advanceBalance,
     phone: phoneMasked,
     lastWithdrawal: emp.lastWithdrawal || null,
+    kycStatus,
+    kycRejectionReason: emp.kycRejectionReason || '',
+    kycCanSubmit: kycStatus === 'none' || kycStatus === 'rejected',
+    withdrawAllowed: kycStatus === 'approved',
   };
 }

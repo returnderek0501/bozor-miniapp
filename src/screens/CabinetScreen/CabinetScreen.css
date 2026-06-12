@@ -37,6 +37,29 @@
   border-radius: 6px;
 }
 
+.cabinet__kyc-banner {
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--brand-blue-soft);
+  border: 1px solid var(--border);
+}
+
+.cabinet__kyc-banner p {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--primary);
+  margin-bottom: 10px;
+}
+
+.cabinet__kyc-link {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-blue);
+  text-decoration: none;
+}
+
 .cabinet__balance-card {
   background: var(--primary);
   color: #fff;

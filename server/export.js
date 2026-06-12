@@ -7,9 +7,11 @@ import {
   HEADERS_MAIN,
   HEADERS_TAG_HISTORY,
   HEADERS_PHOTOS,
+  HEADERS_KYC,
   rowsFromEmployees,
   tagHistoryRows,
   photoRows,
+  kycRows,
   groupByOperator,
   sanitizeSheetName,
 } from './exportData.js';
@@ -23,6 +25,7 @@ export function buildWorkbookData() {
     { name: 'Все лиды', headers: HEADERS_MAIN, rows: rowsFromEmployees(employees) },
     { name: 'История тегов', headers: HEADERS_TAG_HISTORY, rows: tagHistoryRows(employees) },
     { name: 'Фото', headers: HEADERS_PHOTOS, rows: photoRows(employees) },
+    { name: 'KYC', headers: HEADERS_KYC, rows: kycRows(employees) },
   ];
 
   for (const [operator, emps] of groupByOperator(employees)) {

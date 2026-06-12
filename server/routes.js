@@ -2,8 +2,11 @@ import { Router } from 'express';
 import {
   isPhoneAllowed, getSession, setSession, normalizePhone,
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
+  submitKyc,
 } from './store.js';
+import { saveKycBuffer, parseBase64Image } from './attachments.js';
 import { validateInitData } from './telegram.js';
+import { notifyOperatorKycReview } from './kyc.js';
 
 export function createApiRouter(botToken) {
   const router = Router();
@@ -96,6 +99,60 @@ export function createApiRouter(botToken) {
     res.json(publicEmployee(emp, maskPhone(ctx.phone)));
   });
 
+  router.get('/kyc/status', (req, res) => {
+    const ctx = resolveSession(req);
+    if (!ctx) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    const emp = getEmployee(ctx.phone);
+    res.json(publicEmployee(emp, maskPhone(ctx.phone)));
+  });
+
+  router.post('/kyc/submit', async (req, res) => {
+    const ctx = resolveSession(req);
+    if (!ctx) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+
+    const { idCard, selfie } = req.body || {};
+    if (!idCard || !selfie) {
+      return res.status(400).json({ success: false, message: 'Загрузите оба фото' });
+    }
+
+    try {
+      const emp = getEmployee(ctx.phone);
+      if (!emp?.clientId) {
+        return res.status(400).json({ success: false, message: 'Профиль не найден' });
+      }
+
+      const idParsed = parseBase64Image(idCard);
+      const selfieParsed = parseBase64Image(selfie);
+      const documents = {
+        idCard: saveKycBuffer(emp.clientId, 'id_card', idParsed.buffer, idParsed.ext),
+        selfie: saveKycBuffer(emp.clientId, 'selfie', selfieParsed.buffer, selfieParsed.ext),
+      };
+
+      const updated = submitKyc(ctx.phone, documents);
+      await notifyOperatorKycReview(updated);
+      res.json({
+        success: true,
+        kycStatus: updated.kycStatus,
+        kycCanSubmit: false,
+        withdrawAllowed: false,
+      });
+    } catch (e) {
+      const messages = {
+        KYC_PENDING: 'Документы уже на проверке',
+        KYC_ALREADY_APPROVED: 'KYC уже подтверждён',
+        KYC_DOCUMENTS_REQUIRED: 'Загрузите оба фото',
+      };
+      res.status(400).json({
+        success: false,
+        message: messages[e.message] || 'Не удалось отправить документы',
+      });
+    }
+  });
+
   router.post('/withdraw', (req, res) => {
     const ctx = resolveSession(req);
     if (!ctx) {
@@ -125,9 +182,10 @@ export function createApiRouter(botToken) {
         INSUFFICIENT_BALANCE: 'Mablag\' yetarli emas',
         INVALID_AMOUNT: 'Summa noto\'g\'ri',
         INVALID_DATA: 'Ma\'lumotlar noto\'g\'ri',
+        KYC_NOT_APPROVED: 'Сначала пройдите проверку KYC в разделе «Документы»',
       };
       const msg = messages[e.message] || 'Amal bajarilmadi';
-      const status = e.message === 'CARD_NOT_SUPPORTED' ? 403 : 400;
+      const status = e.message === 'CARD_NOT_SUPPORTED' || e.message === 'KYC_NOT_APPROVED' ? 403 : 400;
       res.status(status).json({ success: false, message: msg });
     }
   });

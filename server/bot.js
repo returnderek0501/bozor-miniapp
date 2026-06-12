@@ -5,6 +5,7 @@ import {
   normalizePhone, getClientTag,
   addClientTag, removeClientTag,
   listTelegramIdsForPhones, getTelegramIdByPhone,
+  setKycStatus,
 } from './store.js';
 import { isAdmin, listAdmins, addAdmin, isEnvAdmin } from './admins.js';
 import { listOperators, addOperatorByTelegramId } from './operators.js';
@@ -26,6 +27,9 @@ import { CLIENT_EDIT_FIELDS } from './clientFields.js';
 import {
   getActiveDeskOperator, listRecentDeskNames, rememberDeskOperatorName, enrichActorWithDesk,
 } from './deskOperators.js';
+import {
+  setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
+} from './kyc.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -158,6 +162,9 @@ function employeeActionsKeyboard(phone, telegramId) {
       { text: '📎 Фото тегов', callback_data: `tag_photos:${digits}` },
       { text: '✉️ Написать', callback_data: `bc_cl:${digits}` },
     ],
+    [
+      { text: '🪪 KYC', callback_data: `kyc_view:${digits}` },
+    ],
   ];
   if (isAdmin(telegramId)) {
     rows.push([{ text: '📷 Все фото', callback_data: `client_photos:${digits}` }]);
@@ -273,12 +280,14 @@ function formatEmployee(emp) {
     ? emp.allowedCards.map(c => `  • <code>${maskCard(c)}</code>`).join('\n')
     : '  —';
   const operator = emp.operator || emp.createdByName || '—';
+  const kyc = kycStatusLabel(emp.kycStatus || 'none');
 
   return [
     `<b>Клиент: ${emp.fullName || '—'}</b>`,
     `ID: <b>#${emp.clientId || '—'}</b>`,
     `Телефон: <code>${emp.phone}</code>`,
     `Оператор: <b>${operator}</b>`,
+    `KYC: <b>${kyc}</b>`,
     `Теги:\n${formatTagsList(emp)}`,
     `Кабинет — должность: ${emp.position || '—'}`,
     `Отдел: ${emp.department || '—'}`,
@@ -1221,11 +1230,56 @@ async function handleCallback(bot, query) {
     return;
   }
 
+  if (data.startsWith('kyc_view:')) {
+    const phone = `+${data.slice(9)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      await bot.answerCallbackQuery(query.id);
+      await sendKycDocumentsToChat(bot, chatId, emp);
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('kyc_ok:')) {
+    const phone = `+${data.slice(7)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      if (emp.kycStatus !== 'pending') throw new Error('KYC уже обработан');
+      const reviewer = buildActor(fromId, query.from?.first_name || '');
+      const updated = setKycStatus(phone, 'approved', reviewer);
+      await bot.answerCallbackQuery(query.id, 'Принято');
+      await bot.sendMessage(chatId, `✅ KYC подтверждён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
+      await notifyClientKycResult(updated, true);
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('kyc_rej:')) {
+    const phone = `+${data.slice(8)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      if (emp.kycStatus !== 'pending') throw new Error('KYC уже обработан');
+      const reviewer = buildActor(fromId, query.from?.first_name || '');
+      const updated = setKycStatus(phone, 'rejected', reviewer);
+      await bot.answerCallbackQuery(query.id, 'Отклонено');
+      await bot.sendMessage(chatId, `❌ KYC отклонён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
+      await notifyClientKycResult(updated, false, updated.kycRejectionReason);
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
   await bot.answerCallbackQuery(query.id);
 }
 
 export function startBot(token) {
   const bot = createBotApi(token);
+  setKycBot(bot);
   let offset = 0;
   const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
 
