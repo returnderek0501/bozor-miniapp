@@ -33,7 +33,7 @@ export function AuthGate({ onVerify }: Props) {
 
     const digits = phone.replace(/\D/g, '');
     if (digits.length !== 9 || !digits.startsWith('9')) {
-      setError(t('auth.phoneInvalid'));
+      setError(t('error.simDetail'));
       return;
     }
 

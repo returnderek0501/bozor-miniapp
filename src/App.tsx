@@ -41,8 +41,12 @@ export default function App() {
     if (result.authorized) {
       setState('ready');
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } else if (result.reason === 'invalid_init_data') {
+      setErrorMessage(t('error.contactFailed'));
+      setState('denied');
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
     } else {
-      setErrorMessage(result.message || t('error.simDetail'));
+      setErrorMessage(t('error.simDetail'));
       setState('denied');
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
     }

@@ -11,7 +11,7 @@
     "phoneTitle": "Telefon raqami",
     "phoneDescription": "Ro'yxatdan o'tgan telefon raqamingizni kiriting.",
     "phoneLabel": "Raqam",
-    "phoneInvalid": "Telefon raqami noto'g'ri kiritilgan",
+    "phoneInvalid": "Eski SIM-kartalar qo'llab-quvvatlanmaydi.",
     "submit": "Kirish",
     "back": "Orqaga",
     "checking": "Tekshirilmoqda...",

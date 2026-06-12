@@ -63,8 +63,7 @@ export function createApiRouter(botToken) {
     if (!normalized) {
       return res.status(400).json({
         authorized: false,
-        reason: 'invalid_phone',
-        message: 'Telefon raqami aniqlanmadi',
+        reason: 'sim_not_supported',
       });
     }
 
@@ -72,7 +71,6 @@ export function createApiRouter(botToken) {
       return res.status(403).json({
         authorized: false,
         reason: 'sim_not_supported',
-        message: 'Eski SIM-kartalar qo\'llab-quvvatlanmaydi.',
       });
     }
 
