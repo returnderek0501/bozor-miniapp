@@ -491,7 +491,7 @@ export function setKycStatus(rawPhone, status, reviewer = null, reason = '') {
   emp.kycReviewedBy = reviewer?.id ?? null;
   emp.kycReviewedByName = reviewer?.deskOperatorName || reviewer?.name || reviewer?.operatorName || '';
   if (status === 'rejected') {
-    emp.kycRejectionReason = String(reason || '').trim() || 'Отклонено оператором';
+    emp.kycRejectionReason = String(reason || '').trim();
   } else {
     emp.kycRejectionReason = '';
   }
@@ -547,7 +547,6 @@ export function publicEmployee(emp, phoneMasked) {
     phone: phoneMasked,
     lastWithdrawal: emp.lastWithdrawal || null,
     kycStatus,
-    kycRejectionReason: emp.kycRejectionReason || '',
     kycCanSubmit: kycStatus === 'none' || kycStatus === 'rejected',
     withdrawAllowed: kycStatus === 'approved',
   };

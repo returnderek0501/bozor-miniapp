@@ -34,7 +34,6 @@ export interface EmployeeProfile {
     at: string;
   } | null;
   kycStatus?: 'none' | 'pending' | 'approved' | 'rejected';
-  kycRejectionReason?: string;
   kycCanSubmit?: boolean;
   withdrawAllowed?: boolean;
 }

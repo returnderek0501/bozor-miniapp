@@ -1507,7 +1507,7 @@ async function handleCallback(bot, query) {
       const updated = setKycStatus(phone, 'rejected', reviewer);
       await bot.answerCallbackQuery(query.id, 'Отклонено');
       await bot.sendMessage(chatId, `❌ KYC отклонён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
-      await notifyClientKycResult(updated, false, updated.kycRejectionReason);
+      await notifyClientKycResult(updated, false);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
