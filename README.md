@@ -36,6 +36,24 @@ npm start
 Смонтируйте Volume в `/main` — телефоны, сессии и профили сотрудников сохраняются между деплоями.
 В логах при старте: `Data directory: /main`.
 
+Если volume переполнился или приложение показывает пустые профили при сохранённых файлах, сначала расширьте volume и запустите диагностику:
+
+```bash
+npm run recover:volume -- --data-dir=/main
+```
+
+Команда проверяет JSON-файлы, считает `attachments/` и показывает, можно ли безопасно сопоставить фото с клиентами. Для черновика восстановления без перезаписи текущих данных:
+
+```bash
+npm run recover:volume -- --data-dir=/main --write-recovered-employees
+```
+
+Она создаст `/main/employees.recovered.json`. Применяйте восстановление только после проверки соответствия `clientId` и номеров:
+
+```bash
+npm run recover:volume -- --data-dir=/main --write-recovered-employees --apply
+```
+
 ### Google Sheets (real-time)
 
 1. Создайте Google Spreadsheet, вкладку назовите `Сотрудники`
