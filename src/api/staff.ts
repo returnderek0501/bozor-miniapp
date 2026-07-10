@@ -27,6 +27,7 @@ export interface StaffProfile {
   role?: 'admin' | 'operator';
   name?: string;
   deskName?: string;
+  needsDeskName?: boolean;
   recentDeskNames?: string[];
 }
 

@@ -72,6 +72,7 @@ export function createApiRouter(botToken) {
       role: staff.isAdmin ? 'admin' : 'operator',
       name: staff.actor?.name || staff.tgUser.first_name || '',
       deskName: staff.deskName,
+      needsDeskName: !staff.isAdmin && !staff.deskName,
       recentDeskNames: staff.isAdmin ? [] : listRecentDeskNames(staff.tgUser.id),
     };
   }
@@ -125,7 +126,10 @@ export function createApiRouter(botToken) {
   router.get('/staff/dashboard', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
-    const clients = listEmployeesForUser(staff.tgUser.id, staff.deskName)
+    const employees = !staff.isAdmin && !staff.deskName
+      ? []
+      : listEmployeesForUser(staff.tgUser.id, staff.deskName);
+    const clients = employees
       .map(staffClientSummary)
       .sort((a, b) => Number(b.clientId || 0) - Number(a.clientId || 0));
     return res.json({

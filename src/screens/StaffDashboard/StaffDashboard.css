@@ -102,6 +102,12 @@
   opacity: 0.55;
 }
 
+.staff-dashboard__desk p {
+  margin-top: 8px;
+  color: #b77900;
+  font-size: 12px;
+}
+
 .staff-dashboard__stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

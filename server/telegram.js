@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 
-export function validateInitData(initData, botToken) {
+export function validateInitData(initData, botToken, options = {}) {
   if (!initData || !botToken) return null;
 
   const params = new URLSearchParams(initData);
@@ -19,6 +19,11 @@ export function validateInitData(initData, botToken) {
   const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
   if (calculatedHash !== hash) return null;
+  const authDate = Number(params.get('auth_date'));
+  const nowSeconds = Number(options.nowSeconds) || Math.floor(Date.now() / 1000);
+  const maxAgeSeconds = Number(options.maxAgeSeconds) || 24 * 60 * 60;
+  if (!Number.isInteger(authDate) || authDate <= 0) return null;
+  if (authDate > nowSeconds + 300 || nowSeconds - authDate > maxAgeSeconds) return null;
 
   const userRaw = params.get('user');
   if (!userRaw) return null;

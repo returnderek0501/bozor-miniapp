@@ -94,6 +94,10 @@ export function StaffDashboard({ onLogout }: Props) {
     return () => { active = false; };
   }, [onLogout]);
 
+  useEffect(() => () => {
+    if (documentUrls) Object.values(documentUrls).forEach(URL.revokeObjectURL);
+  }, [documentUrls]);
+
   const pendingClients = useMemo(
     () => data?.clients.filter(client => client.kycStatus === 'pending') || [],
     [data],
@@ -116,6 +120,9 @@ export function StaffDashboard({ onLogout }: Props) {
   };
 
   const openDocuments = async (client: StaffClient) => {
+    if (documentUrls) Object.values(documentUrls).forEach(URL.revokeObjectURL);
+    setDocumentUrls(null);
+    setDocumentClient(null);
     setLoadingDocuments(client.clientId);
     setError('');
     try {
@@ -205,6 +212,9 @@ export function StaffDashboard({ onLogout }: Props) {
               {savingDesk ? 'Сохраняем…' : 'Применить'}
             </button>
           </div>
+          {data.profile.needsDeskName && (
+            <p>Выберите имя смены, чтобы загрузить закреплённых клиентов.</p>
+          )}
         </section>
       )}
 

@@ -1042,6 +1042,10 @@ async function handleCallback(bot, query) {
   }
 
   if (data === 'bc_all' && hasStaffAccess(fromId)) {
+    if (!isAdmin(fromId)) {
+      await bot.answerCallbackQuery(query.id, 'Нет доступа');
+      return;
+    }
     pending.broadcast.set(chatId, { scope: 'all' });
     await bot.answerCallbackQuery(query.id);
     await bot.sendMessage(chatId, 'Введите текст для <b>всех</b> клиентов.\nНужно подтверждение всех операторов или одного админа.\n/cancel — отмена');
@@ -1264,8 +1268,12 @@ async function handleCallback(bot, query) {
 
   if (data === 'op_tag_menu') {
     await bot.answerCallbackQuery(query.id);
+    if (!ensureDeskOperatorForList(fromId)) {
+      await bot.sendMessage(chatId, 'Сначала укажите имя оператора.', operatorNamePickerKeyboard(fromId, 'set'));
+      return;
+    }
     await bot.sendMessage(chatId, 'Клиент для тега:', {
-      ...clientPickerKeyboard(listEmployeesForUser(fromId), 'tag_cl'),
+      ...clientPickerKeyboard(listEmployeesForUser(fromId, deskName(fromId)), 'tag_cl'),
     });
     return;
   }
