@@ -26,7 +26,7 @@ import {
 } from './panelAccess.js';
 import { staffClientSummary, staffClientDetail } from './staffDto.js';
 import {
-  listTagsForUser, addTag, removeTag, getTag, GLOBAL_TAG_COUNT,
+  listTagsForUser, addTag, removeTag, GLOBAL_TAG_COUNT,
 } from './tags.js';
 import {
   listOperators, addOperatorByTelegramId, removeOperator,

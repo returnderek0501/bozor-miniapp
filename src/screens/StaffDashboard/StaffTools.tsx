@@ -170,12 +170,6 @@ export function StaffTools({
     setBusy(false);
   };
 
-  const reloadDetail = async () => {
-    if (!selectedClientId) return;
-    const response = await fetchStaffClient(selectedClientId);
-    setDetail(response.client);
-  };
-
   const openCatalog = async () => {
     setTool('catalog');
     setBusy(true);
