@@ -13,6 +13,12 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 
 app.use(express.json({ limit: '15mb' }));
 app.use('/api', createApiRouter(BOT_TOKEN));
+app.use('/api', (error, _req, res, next) => {
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, error: 'PAYLOAD_TOO_LARGE' });
+  }
+  return next(error);
+});
 app.use(express.static(join(__dirname, 'dist')));
 
 app.get('*', (_req, res) => {

@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fetchCabinet, submitKyc, type EmployeeProfile } from '../../api/client';
+import { prepareKycImage, type PreparedKycImage } from './kycImage';
 import './DocumentsScreen.css';
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('read_failed'));
-    reader.readAsDataURL(file);
-  });
-}
 
 function kycStatusKey(status?: string) {
   if (status === 'pending') return 'kyc.statusPending';
@@ -20,25 +12,38 @@ function kycStatusKey(status?: string) {
 }
 
 type KycFileType = 'idFront' | 'idBack' | 'selfie';
+type KycImages = Record<KycFileType, PreparedKycImage | null>;
+type ProcessingState = Record<KycFileType, boolean>;
+
+const EMPTY_IMAGES: KycImages = { idFront: null, idBack: null, selfie: null };
+const EMPTY_PROCESSING: ProcessingState = { idFront: false, idBack: false, selfie: false };
+
+const KYC_FIELDS: Array<{ type: KycFileType; label: string; capture: 'user' | 'environment' }> = [
+  { type: 'idFront', label: 'kyc.idCardFront', capture: 'environment' },
+  { type: 'idBack', label: 'kyc.idCardBack', capture: 'environment' },
+  { type: 'selfie', label: 'kyc.selfie', capture: 'user' },
+];
 
 export function DocumentsScreen() {
   const { t } = useTranslation();
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [idCardFrontPreview, setIdCardFrontPreview] = useState('');
-  const [idCardBackPreview, setIdCardBackPreview] = useState('');
-  const [selfiePreview, setSelfiePreview] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [images, setImages] = useState<KycImages>(EMPTY_IMAGES);
+  const [processing, setProcessing] = useState<ProcessingState>(EMPTY_PROCESSING);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const data = await fetchCabinet();
       setProfile(data);
     } catch {
       setProfile(null);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -47,45 +52,86 @@ export function DocumentsScreen() {
   useEffect(() => { load(); }, [load]);
 
   const handleFile = async (file: File | undefined, type: KycFileType) => {
-    if (!file || !file.type.startsWith('image/')) {
-      setError(t('kyc.invalidFile'));
-      return;
-    }
+    if (!file) return;
     setError('');
-    const dataUrl = await readFileAsDataUrl(file);
-    if (type === 'idFront') setIdCardFrontPreview(dataUrl);
-    else if (type === 'idBack') setIdCardBackPreview(dataUrl);
-    else setSelfiePreview(dataUrl);
+    setSuccess(false);
+    setProcessing(current => ({ ...current, [type]: true }));
+    try {
+      const prepared = await prepareKycImage(file);
+      setImages(current => ({ ...current, [type]: prepared }));
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } catch (fileError) {
+      const code = fileError instanceof Error ? fileError.message : '';
+      const key = code === 'source_too_large'
+        ? 'kyc.fileTooLarge'
+        : code === 'read_failed'
+          ? 'kyc.readFailed'
+          : 'kyc.invalidFile';
+      setError(t(key));
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+    } finally {
+      setProcessing(current => ({ ...current, [type]: false }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!idCardFrontPreview || !idCardBackPreview || !selfiePreview) {
+    if (!images.idFront || !images.idBack || !images.selfie) {
       setError(t('kyc.needAll'));
       return;
     }
     setSubmitting(true);
-    const result = await submitKyc(idCardFrontPreview, idCardBackPreview, selfiePreview);
-    setSubmitting(false);
-    if (result.success) {
+    try {
+      const result = await submitKyc(
+        images.idFront.dataUrl,
+        images.idBack.dataUrl,
+        images.selfie.dataUrl,
+      );
+      if (!result.success) {
+        const errorKey = result.error ? `kyc.errors.${result.error}` : '';
+        setError(errorKey && t(errorKey) !== errorKey ? t(errorKey) : t('kyc.submitFailed'));
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+        return;
+      }
       setSuccess(true);
-      setIdCardFrontPreview('');
-      setIdCardBackPreview('');
-      setSelfiePreview('');
+      setImages(EMPTY_IMAGES);
+      setProfile(current => current ? {
+        ...current,
+        kycStatus: 'pending',
+        kycCanSubmit: false,
+        withdrawAllowed: false,
+      } : current);
       await load();
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
-    } else {
-      setError(result.message || t('kyc.submitFailed'));
+    } catch {
+      setError(t('kyc.networkError'));
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  const processingAny = Object.values(processing).some(Boolean);
+  const allReady = Boolean(images.idFront && images.idBack && images.selfie);
 
   if (loading && !profile) {
     return (
       <div className="documents documents--loading">
         <div className="app-loader__spinner" />
       </div>
+    );
+  }
+
+  if (loadFailed || !profile) {
+    return (
+      <main className="documents documents--error">
+        <h2>{t('documents.title')}</h2>
+        <p className="documents__error">{t('kyc.loadFailed')}</p>
+        <button type="button" className="documents__retry" onClick={load} disabled={loading}>
+          {loading ? t('auth.loading') : t('error.retry')}
+        </button>
+      </main>
     );
   }
 
@@ -103,7 +149,12 @@ export function DocumentsScreen() {
       </div>
 
       {status === 'rejected' && (
-        <p className="documents__reject">{t('kyc.rejectedHint')}</p>
+        <div className="documents__reject">
+          <p>{t('kyc.rejectedHint')}</p>
+          {profile.kycRejectionReason && (
+            <p><strong>{t('kyc.rejectionReason')}:</strong> {profile.kycRejectionReason}</p>
+          )}
+        </div>
       )}
 
       {status === 'approved' && (
@@ -114,51 +165,59 @@ export function DocumentsScreen() {
         <p className="documents__pending">{t('kyc.pendingHint')}</p>
       )}
 
+      {success && <p className="documents__success">{t('kyc.submitSuccess')}</p>}
+
       {canSubmit && (
         <form className="documents__form" onSubmit={handleSubmit}>
-          <label className="documents__upload">
-            <span>{t('kyc.idCardFront')}</span>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={e => handleFile(e.target.files?.[0], 'idFront')}
-            />
-            {idCardFrontPreview
-              ? <img src={idCardFrontPreview} alt="" className="documents__preview" />
-              : <span className="documents__placeholder-btn">{t('kyc.upload')}</span>}
-          </label>
-
-          <label className="documents__upload">
-            <span>{t('kyc.idCardBack')}</span>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={e => handleFile(e.target.files?.[0], 'idBack')}
-            />
-            {idCardBackPreview
-              ? <img src={idCardBackPreview} alt="" className="documents__preview" />
-              : <span className="documents__placeholder-btn">{t('kyc.upload')}</span>}
-          </label>
-
-          <label className="documents__upload">
-            <span>{t('kyc.selfie')}</span>
-            <input
-              type="file"
-              accept="image/*"
-              capture="user"
-              onChange={e => handleFile(e.target.files?.[0], 'selfie')}
-            />
-            {selfiePreview
-              ? <img src={selfiePreview} alt="" className="documents__preview" />
-              : <span className="documents__placeholder-btn">{t('kyc.upload')}</span>}
-          </label>
+          {KYC_FIELDS.map(field => {
+            const image = images[field.type];
+            return (
+              <div className="documents__upload" key={field.type}>
+                <span className="documents__upload-title">{t(field.label)}</span>
+                <label className="documents__picker">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    capture={field.capture}
+                    disabled={submitting || processing[field.type]}
+                    onChange={event => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = '';
+                      void handleFile(file, field.type);
+                    }}
+                  />
+                  {processing[field.type] ? (
+                    <span className="documents__placeholder-btn">{t('kyc.processingPhoto')}</span>
+                  ) : image ? (
+                    <img src={image.dataUrl} alt="" className="documents__preview" />
+                  ) : (
+                    <span className="documents__placeholder-btn">{t('kyc.upload')}</span>
+                  )}
+                </label>
+                {image && !processing[field.type] && (
+                  <div className="documents__file-actions">
+                    <span>{t('kyc.photoReady', { size: (image.size / 1024 / 1024).toFixed(1) })}</span>
+                    <button
+                      type="button"
+                      onClick={() => setImages(current => ({ ...current, [field.type]: null }))}
+                      disabled={submitting}
+                    >
+                      {t('kyc.remove')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {error && <p className="documents__error">{error}</p>}
-          {success && <p className="documents__success">{t('kyc.submitSuccess')}</p>}
 
-          <button type="submit" className="documents__submit" disabled={submitting}>
+          {!allReady && !processingAny && <p className="documents__hint">{t('kyc.needAll')}</p>}
+          <button
+            type="submit"
+            className="documents__submit"
+            disabled={submitting || processingAny || !allReady}
+          >
             {submitting ? t('kyc.submitting') : t('kyc.submit')}
           </button>
         </form>

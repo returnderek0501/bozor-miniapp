@@ -4,7 +4,9 @@ import {
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
   submitKyc,
 } from './store.js';
-import { saveKycBuffer, parseBase64Image } from './attachments.js';
+import {
+  saveKycBuffer, parseBase64Image, deleteKycDocuments,
+} from './attachments.js';
 import { validateInitData } from './telegram.js';
 import { notifyOperatorKycReview } from './kyc.js';
 
@@ -116,25 +118,31 @@ export function createApiRouter(botToken) {
 
     const { idCardFront, idCardBack, selfie } = req.body || {};
     if (!idCardFront || !idCardBack || !selfie) {
-      return res.status(400).json({ success: false, message: 'Загрузите все три фото' });
+      return res.status(400).json({ success: false, error: 'KYC_DOCUMENTS_REQUIRED' });
     }
 
+    let savedDocuments = null;
+    let submitted = false;
     try {
       const emp = getEmployee(ctx.phone);
       if (!emp?.clientId) {
-        return res.status(400).json({ success: false, message: 'Профиль не найден' });
+        return res.status(404).json({ success: false, error: 'PROFILE_NOT_FOUND' });
       }
+      if (emp.kycStatus === 'pending') throw new Error('KYC_PENDING');
+      if (emp.kycStatus === 'approved') throw new Error('KYC_ALREADY_APPROVED');
 
       const frontParsed = parseBase64Image(idCardFront);
       const backParsed = parseBase64Image(idCardBack);
       const selfieParsed = parseBase64Image(selfie);
-      const documents = {
-        idCardFront: saveKycBuffer(emp.clientId, 'id_card_front', frontParsed.buffer, frontParsed.ext),
-        idCardBack: saveKycBuffer(emp.clientId, 'id_card_back', backParsed.buffer, backParsed.ext),
-        selfie: saveKycBuffer(emp.clientId, 'selfie', selfieParsed.buffer, selfieParsed.ext),
-      };
+      savedDocuments = {};
+      savedDocuments.idCardFront = saveKycBuffer(emp.clientId, 'id_card_front', frontParsed.buffer, frontParsed.ext);
+      savedDocuments.idCardBack = saveKycBuffer(emp.clientId, 'id_card_back', backParsed.buffer, backParsed.ext);
+      savedDocuments.selfie = saveKycBuffer(emp.clientId, 'selfie', selfieParsed.buffer, selfieParsed.ext);
 
-      const updated = submitKyc(ctx.phone, documents);
+      const previousDocuments = emp.kycDocuments;
+      const updated = submitKyc(ctx.phone, savedDocuments);
+      submitted = true;
+      deleteKycDocuments(previousDocuments);
       await notifyOperatorKycReview(updated);
       res.json({
         success: true,
@@ -143,14 +151,20 @@ export function createApiRouter(botToken) {
         withdrawAllowed: false,
       });
     } catch (e) {
-      const messages = {
-        KYC_PENDING: 'Документы уже на проверке',
-        KYC_ALREADY_APPROVED: 'KYC уже подтверждён',
-        KYC_DOCUMENTS_REQUIRED: 'Загрузите все три фото',
-      };
-      res.status(400).json({
+      if (!submitted && savedDocuments) deleteKycDocuments(savedDocuments);
+      const knownErrors = new Set([
+        'KYC_PENDING',
+        'KYC_ALREADY_APPROVED',
+        'KYC_DOCUMENTS_REQUIRED',
+        'INVALID_IMAGE',
+        'IMAGE_TOO_SMALL',
+        'IMAGE_TOO_LARGE',
+      ]);
+      const error = knownErrors.has(e.message) ? e.message : 'KYC_SUBMIT_FAILED';
+      const status = error === 'KYC_PENDING' || error === 'KYC_ALREADY_APPROVED' ? 409 : 400;
+      res.status(status).json({
         success: false,
-        message: messages[e.message] || 'Не удалось отправить документы',
+        error,
       });
     }
   });

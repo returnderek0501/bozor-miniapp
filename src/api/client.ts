@@ -34,12 +34,14 @@ export interface EmployeeProfile {
     at: string;
   } | null;
   kycStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  kycRejectionReason?: string;
   kycCanSubmit?: boolean;
   withdrawAllowed?: boolean;
 }
 
 export interface KycSubmitResult {
   success: boolean;
+  error?: string;
   message?: string;
   kycStatus?: string;
 }
@@ -89,16 +91,27 @@ export async function submitKyc(
   idCardBack: string,
   selfie: string,
 ): Promise<KycSubmitResult> {
-  const res = await fetch('/api/kyc/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ idCardFront, idCardBack, selfie }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    return { success: false, message: data.message };
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
+  try {
+    const res = await fetch('/api/kyc/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ idCardFront, idCardBack, selfie }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.error || (res.status === 413 ? 'PAYLOAD_TOO_LARGE' : 'KYC_SUBMIT_FAILED'),
+        message: data.message,
+      };
+    }
+    return data;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return data;
 }
 
 export async function requestWithdraw(cardNumber: string, amount?: number): Promise<WithdrawResult> {

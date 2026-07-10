@@ -29,7 +29,6 @@ export function isEnvAdmin(id) {
 
 export function isAdmin(id) {
   const n = Number(id);
-  if (envAdminIds().length === 0 && storedIds().length === 0) return true;
   return listAdmins().includes(n);
 }
 

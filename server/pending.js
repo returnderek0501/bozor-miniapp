@@ -9,6 +9,7 @@ const broadcast = new Map();
 const addStaff = new Map();
 const addTagLabel = new Map();
 const deskOperatorName = new Map();
+const kycReject = new Map();
 
 export function clearAllPending(chatId) {
   addClient.delete(chatId);
@@ -22,6 +23,7 @@ export function clearAllPending(chatId) {
   addStaff.delete(chatId);
   addTagLabel.delete(chatId);
   deskOperatorName.delete(chatId);
+  kycReject.delete(chatId);
 }
 
 export const pending = {
@@ -36,4 +38,5 @@ export const pending = {
   addStaff,
   addTagLabel,
   deskOperatorName,
+  kycReject,
 };

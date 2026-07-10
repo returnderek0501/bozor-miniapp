@@ -4,6 +4,13 @@ import { getTelegramIdByPhone, normalizePhone } from './store.js';
 
 let botRef = null;
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
 export const KYC_STATUS_LABELS = {
   none: 'Не пройден',
   pending: 'На проверке',
@@ -87,7 +94,7 @@ export async function notifyOperatorKycReview(emp) {
   }
 }
 
-export async function notifyClientKycResult(emp, approved) {
+export async function notifyClientKycResult(emp, approved, reason = '') {
   if (!botRef || !emp) return;
   const tid = getTelegramIdByPhone(emp.phone);
   if (!tid) return;
@@ -96,7 +103,8 @@ export async function notifyClientKycResult(emp, approved) {
     ? '✅ <b>KYC подтверждён</b>\n\nТеперь вы можете выводить аванс в личном кабинете.'
     : [
       '❌ <b>KYC отклонён</b>',
-      '\nДокументы не прошли проверку. Загрузите их заново в разделе «Документы».',
+      reason ? `\n\nПричина: ${escapeHtml(reason)}` : '',
+      '\n\nИсправьте фото и загрузите документы заново в разделе «Документы».',
     ].join('');
 
   try {
@@ -117,14 +125,19 @@ export async function sendKycDocumentsToChat(bot, chatId, emp) {
   await bot.sendMessage(chatId, `🪪 KYC — #<code>${emp.clientId}</code> (${emp.fullName || emp.phone})`, {
     reply_markup: kycModerationKeyboard(emp.phone),
   });
-  if (idCardFront?.path) {
-    await bot.sendPhotoFile(chatId, attachmentAbsolutePath(idCardFront.path), '📄 ID-карта (лицевая сторона)');
-  }
-  if (idCardBack?.path) {
-    await bot.sendPhotoFile(chatId, attachmentAbsolutePath(idCardBack.path), '📄 ID-карта (обратная сторона)');
-  }
-  if (selfie?.path) {
-    await bot.sendPhotoFile(chatId, attachmentAbsolutePath(selfie.path), '🤳 Селфи с ID-картой');
+  const documents = [
+    [idCardFront, '📄 ID-карта (лицевая сторона)'],
+    [idCardBack, '📄 ID-карта (обратная сторона)'],
+    [selfie, '🤳 Селфи с ID-картой'],
+  ];
+  for (const [document, caption] of documents) {
+    if (!document?.path) continue;
+    try {
+      await bot.sendPhotoFile(chatId, attachmentAbsolutePath(document.path), caption);
+    } catch (error) {
+      console.error(`KYC photo send failed for ${emp.phone}:`, error.message);
+      await bot.sendMessage(chatId, `⚠️ Не удалось открыть: ${caption}`);
+    }
   }
 }
 

@@ -9,6 +9,10 @@
   min-height: 300px;
 }
 
+.documents--error {
+  text-align: center;
+}
+
 .documents h2 {
   font-size: 20px;
   font-weight: 600;
@@ -72,16 +76,20 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  cursor: pointer;
 }
 
-.documents__upload span:first-child {
+.documents__upload-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--primary);
 }
 
-.documents__upload input[type="file"] {
+.documents__picker {
+  display: block;
+  cursor: pointer;
+}
+
+.documents__picker input[type="file"] {
   display: none;
 }
 
@@ -109,9 +117,33 @@
   font-size: 14px;
 }
 
+.documents__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 .documents__success {
   color: #1a7f37;
   font-size: 14px;
+}
+
+.documents__file-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.documents__file-actions button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: #c0392b;
 }
 
 .documents__submit {
@@ -128,4 +160,16 @@
 
 .documents__submit:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.documents__retry {
+  width: 100%;
+  margin-top: 12px;
+  padding: 13px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--brand-blue);
+  color: #fff;
+  font-weight: 600;
 }

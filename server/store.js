@@ -547,6 +547,7 @@ export function publicEmployee(emp, phoneMasked) {
     phone: phoneMasked,
     lastWithdrawal: emp.lastWithdrawal || null,
     kycStatus,
+    kycRejectionReason: kycStatus === 'rejected' ? String(emp.kycRejectionReason || '') : '',
     kycCanSubmit: kycStatus === 'none' || kycStatus === 'rejected',
     withdrawAllowed: kycStatus === 'approved',
   };

@@ -30,6 +30,9 @@ import {
 import {
   setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
 } from './kyc.js';
+import {
+  isPanelSecretConfigured, matchesPanelSecret, unlockPanel, lockPanel, isPanelUnlocked,
+} from './panelAccess.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -57,6 +60,20 @@ function operatorPanelTitle(fromId) {
   return n
     ? `<b>Панель оператора</b>\n👤 Сейчас: <b>${n}</b>`
     : '<b>Панель оператора</b>\n<i>Укажите имя оператора</i>';
+}
+
+async function openStaffPanel(bot, chatId, fromId) {
+  if (!hasStaffAccess(fromId)) return false;
+  clearAllPending(chatId);
+  if (isAdmin(fromId)) {
+    await bot.sendMessage(chatId, '<b>Панель администратора</b>', adminKeyboard());
+  } else {
+    await bot.sendMessage(chatId, operatorPanelTitle(fromId), operatorKeyboard());
+    if (!deskName(fromId) && listRecentDeskNames(fromId).length) {
+      await bot.sendMessage(chatId, 'Выберите имя для этой смены:', operatorNamePickerKeyboard(fromId, 'set'));
+    }
+  }
+  return true;
 }
 
 function operatorNamePickerKeyboard(telegramId, mode = 'set') {
@@ -459,6 +476,35 @@ function requireClientAccess(fromId, phone) {
   return emp;
 }
 
+const KYC_REJECTION_REASONS = {
+  blur: 'Фото размыто или нечитаемо',
+  data: 'Данные документа не видны',
+  crop: 'Документ обрезан или закрыт',
+  selfie: 'Селфи не соответствует требованиям',
+};
+
+function kycRejectionKeyboard(phone) {
+  const digits = phoneDigits(phone);
+  return ik([
+    [{ text: '🌫 Фото размыто', callback_data: `kyc_reason:blur:${digits}` }],
+    [{ text: '🔎 Не видны данные', callback_data: `kyc_reason:data:${digits}` }],
+    [{ text: '✂️ Документ обрезан', callback_data: `kyc_reason:crop:${digits}` }],
+    [{ text: '🤳 Проблема с селфи', callback_data: `kyc_reason:selfie:${digits}` }],
+    [{ text: '✏️ Другая причина', callback_data: `kyc_reason:other:${digits}` }],
+  ]);
+}
+
+async function rejectKyc(bot, chatId, fromId, displayName, phone, reason) {
+  const emp = requireClientAccess(fromId, phone);
+  if (emp.kycStatus !== 'pending') throw new Error('KYC уже обработан');
+  const reviewer = buildActor(fromId, displayName || '');
+  const updated = setKycStatus(phone, 'rejected', reviewer, reason);
+  pending.kycReject.delete(chatId);
+  await bot.sendMessage(chatId, `❌ KYC отклонён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
+  await notifyClientKycResult(updated, false, reason);
+  return updated;
+}
+
 function extractFileId(msg) {
   if (msg.photo?.length) return msg.photo[msg.photo.length - 1].file_id;
   if (msg.document?.mime_type?.startsWith('image/')) return msg.document.file_id;
@@ -576,7 +622,7 @@ async function handleMediaMessage(bot, msg) {
   const chatId = msg.chat.id;
   const fromId = msg.from.id;
   const fileId = extractFileId(msg);
-  if (!fileId || !hasStaffAccess(fromId)) return;
+  if (!fileId || !hasStaffAccess(fromId) || !isPanelUnlocked(chatId, fromId)) return;
 
   const pFree = pending.tagFreeform.get(chatId);
   if (pFree) {
@@ -610,6 +656,22 @@ async function handlePendingText(bot, msg) {
   const fromId = msg.from.id;
   const text = (msg.text || '').trim();
   const actor = getActor(fromId, msg.from.first_name);
+  if (!hasStaffAccess(fromId) || !isPanelUnlocked(chatId, fromId)) return false;
+
+  if (pending.kycReject.has(chatId)) {
+    const { phone } = pending.kycReject.get(chatId);
+    if (text.length < 3 || text.length > 300) {
+      await bot.sendMessage(chatId, 'Причина должна содержать от 3 до 300 символов.');
+      return true;
+    }
+    try {
+      await rejectKyc(bot, chatId, fromId, msg.from.first_name, phone, text);
+    } catch (e) {
+      pending.kycReject.delete(chatId);
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
 
   if (pending.tagAdd.has(chatId)) {
     const p = pending.tagAdd.get(chatId);
@@ -817,11 +879,15 @@ async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/cancel')) {
     clearAllPending(chatId);
-    await bot.sendMessage(chatId, 'Отменено.', panelKeyboard(fromId));
+    if (hasStaffAccess(fromId) && isPanelUnlocked(chatId, fromId)) {
+      await bot.sendMessage(chatId, 'Отменено.', panelKeyboard(fromId));
+    } else {
+      await bot.sendMessage(chatId, 'Отменено.');
+    }
     return;
   }
 
-  if (matchCmd(text, '/skip') && pending.tagAdd.has(chatId)) {
+  if (matchCmd(text, '/skip') && isPanelUnlocked(chatId, fromId) && pending.tagAdd.has(chatId)) {
     const p = pending.tagAdd.get(chatId);
     try {
       requireClientAccess(fromId, p.phone);
@@ -837,24 +903,23 @@ async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/start')) {
     clearAllPending(chatId);
+    lockPanel(chatId, fromId);
     await bot.sendMessage(chatId, '<b>Uztronix CRM</b>\n\nЛичный кабинет — Mini App.', { reply_markup: miniAppReplyKeyboard() });
     await bot.sendMessage(chatId, 'Mini App:', miniAppInlineKeyboard());
-    if (isAdmin(fromId)) await bot.sendMessage(chatId, '<b>Панель администратора</b>', adminKeyboard());
-    else if (hasStaffAccess(fromId)) await bot.sendMessage(chatId, operatorPanelTitle(fromId), operatorKeyboard());
     return;
   }
 
-  if (matchCmd(text, '/admin') && isAdmin(fromId)) {
-    clearAllPending(chatId);
-    await bot.sendMessage(chatId, '<b>Панель администратора</b>', adminKeyboard());
+  if (!text.startsWith('/') && hasStaffAccess(fromId) && matchesPanelSecret(text)) {
+    unlockPanel(chatId, fromId);
+    await openStaffPanel(bot, chatId, fromId);
     return;
   }
 
-  if (matchCmd(text, '/panel', '/operator') && hasStaffAccess(fromId)) {
-    clearAllPending(chatId);
-    await bot.sendMessage(chatId, operatorPanelTitle(fromId), operatorKeyboard());
-    if (!isAdmin(fromId) && !deskName(fromId) && listRecentDeskNames(fromId).length) {
-      await bot.sendMessage(chatId, 'Выберите имя для этой смены:', operatorNamePickerKeyboard(fromId, 'set'));
+  if (matchCmd(text, '/admin', '/panel', '/operator') && hasStaffAccess(fromId)) {
+    if (isPanelUnlocked(chatId, fromId)) {
+      await openStaffPanel(bot, chatId, fromId);
+    } else {
+      await bot.sendMessage(chatId, 'Введите секретный номер для открытия служебного меню.');
     }
     return;
   }
@@ -863,12 +928,12 @@ async function handleCommand(bot, msg) {
 
   const cmd = text.split(/\s+/)[0].toLowerCase();
 
-  if (cmd === '/help' && hasStaffAccess(fromId)) {
+  if (cmd === '/help' && hasStaffAccess(fromId) && isPanelUnlocked(chatId, fromId)) {
     await bot.sendMessage(chatId, isAdmin(fromId) ? adminHelpText() : operatorHelpText(), panelKeyboard(fromId));
     return;
   }
 
-  if (cmd === '/export' && canExport(fromId)) {
+  if (cmd === '/export' && canExport(fromId) && isPanelUnlocked(chatId, fromId)) {
     await sendExport(bot, chatId);
   }
 }
@@ -880,6 +945,14 @@ async function handleCallback(bot, query) {
   const messageId = query.message?.message_id;
   const fromId = query.from?.id;
   const data = query.data || '';
+  if (!hasStaffAccess(fromId)) {
+    await bot.answerCallbackQuery(query.id, 'Нет доступа');
+    return;
+  }
+  if (!isPanelUnlocked(chatId, fromId)) {
+    await bot.answerCallbackQuery(query.id, 'Сначала введите секретный номер в чат');
+    return;
+  }
   const actor = getActor(fromId, query.from?.first_name);
 
   const panelActions = new Set([
@@ -1072,11 +1145,6 @@ async function handleCallback(bot, query) {
   if (data === 'admin_export' && canExport(fromId)) {
     await bot.answerCallbackQuery(query.id, 'Готовлю...');
     await sendExport(bot, chatId);
-    return;
-  }
-
-  if (!hasStaffAccess(fromId)) {
-    await bot.answerCallbackQuery(query.id, 'Нет доступа');
     return;
   }
 
@@ -1490,6 +1558,7 @@ async function handleCallback(bot, query) {
       const reviewer = buildActor(fromId, query.from?.first_name || '');
       const updated = setKycStatus(phone, 'approved', reviewer);
       await bot.answerCallbackQuery(query.id, 'Принято');
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
       await bot.sendMessage(chatId, `✅ KYC подтверждён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
       await notifyClientKycResult(updated, true);
     } catch (e) {
@@ -1503,11 +1572,31 @@ async function handleCallback(bot, query) {
     try {
       const emp = requireClientAccess(fromId, phone);
       if (emp.kycStatus !== 'pending') throw new Error('KYC уже обработан');
-      const reviewer = buildActor(fromId, query.from?.first_name || '');
-      const updated = setKycStatus(phone, 'rejected', reviewer);
+      await bot.answerCallbackQuery(query.id);
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
+      await bot.sendMessage(chatId, `Почему отклонён KYC клиента #<code>${emp.clientId}</code>?`, kycRejectionKeyboard(phone));
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('kyc_reason:')) {
+    const [reasonCode, digits] = data.slice(11).split(':');
+    const phone = `+${digits || ''}`;
+    try {
+      requireClientAccess(fromId, phone);
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
+      if (reasonCode === 'other') {
+        pending.kycReject.set(chatId, { phone });
+        await bot.answerCallbackQuery(query.id);
+        await bot.sendMessage(chatId, 'Введите причину отказа (3–300 символов):\n/cancel — отмена');
+        return;
+      }
+      const reason = KYC_REJECTION_REASONS[reasonCode];
+      if (!reason) throw new Error('Причина не найдена');
+      await rejectKyc(bot, chatId, fromId, query.from?.first_name, phone, reason);
       await bot.answerCallbackQuery(query.id, 'Отклонено');
-      await bot.sendMessage(chatId, `❌ KYC отклонён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
-      await notifyClientKycResult(updated, false);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
@@ -1522,6 +1611,9 @@ export function startBot(token) {
   setKycBot(bot);
   let offset = 0;
   const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
+  if (!isPanelSecretConfigured()) {
+    console.error('STAFF_PANEL_SECRET must contain 4–32 digits; staff menu is locked.');
+  }
 
   bot.setChatMenuButton({ type: 'web_app', text: 'Shaxsiy kabinet', web_app: { url } }).catch(() => {});
 

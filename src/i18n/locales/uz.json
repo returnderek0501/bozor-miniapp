@@ -85,11 +85,30 @@
     "submitSuccess": "Hujjatlar yuborildi. Operator qarorini kuting.",
     "submitFailed": "Hujjatlarni yuborib bo'lmadi",
     "needAll": "Uchala fotoni ham yuklang",
-    "invalidFile": "Rasm tanlang",
+    "invalidFile": "JPG, PNG yoki WebP formatidagi rasmni tanlang",
+    "fileTooLarge": "Rasm juda katta. Pastroq aniqlikda qayta suratga oling.",
+    "readFailed": "Rasmga ishlov berilmadi. Uni qayta tanlang.",
+    "networkError": "Aloqa uzildi. Rasmlar ekranda saqlandi — qayta yuborib ko'ring.",
+    "loadFailed": "KYC holatini yuklab bo'lmadi. Aloqani tekshirib, qayta urinib ko'ring.",
+    "processingPhoto": "Rasm tayyorlanmoqda...",
+    "photoReady": "Tayyor · {{size}} MB",
+    "remove": "O'chirish",
+    "rejectionReason": "Sabab",
     "withdrawBlocked": "Avans chiqarish faqat KYC tasdiqlangandan keyin mumkin.",
     "goDocuments": "KYC dan o'tish →",
     "approvedHint": "Tekshiruv o'tdi. Avansni chiqarishingiz mumkin.",
     "pendingHint": "Hujjatlar tekshiruvda. Qarorni kuting.",
-    "rejectedHint": "Hujjatlar tekshiruvdan o'tmadi. Ularni qayta yuklang."
+    "rejectedHint": "Hujjatlar tekshiruvdan o'tmadi. Ularni qayta yuklang.",
+    "errors": {
+      "KYC_PENDING": "Hujjatlar allaqachon tekshiruvda.",
+      "KYC_ALREADY_APPROVED": "KYC allaqachon tasdiqlangan.",
+      "KYC_DOCUMENTS_REQUIRED": "Uchala fotoni ham yuklang.",
+      "INVALID_IMAGE": "Rasmlardan biri buzilgan yoki formati qo'llab-quvvatlanmaydi.",
+      "IMAGE_TOO_SMALL": "Rasmlardan biri bo'sh yoki juda kichik.",
+      "IMAGE_TOO_LARGE": "Rasmlardan biri ruxsat etilgan hajmdan katta.",
+      "PAYLOAD_TOO_LARGE": "Rasmlarning umumiy hajmi juda katta.",
+      "PROFILE_NOT_FOUND": "Mijoz profili topilmadi.",
+      "KYC_SUBMIT_FAILED": "Hujjatlarni saqlab bo'lmadi. Qayta urinib ko'ring."
+    }
   }
 }
