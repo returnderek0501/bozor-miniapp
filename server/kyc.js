@@ -4,13 +4,6 @@ import { getTelegramIdByPhone, normalizePhone } from './store.js';
 
 let botRef = null;
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
-}
-
 export const KYC_STATUS_LABELS = {
   none: 'Не пройден',
   pending: 'На проверке',
@@ -94,7 +87,7 @@ export async function notifyOperatorKycReview(emp) {
   }
 }
 
-export async function notifyClientKycResult(emp, approved, reason = '') {
+export async function notifyClientKycResult(emp, approved) {
   if (!botRef || !emp) return;
   const tid = getTelegramIdByPhone(emp.phone);
   if (!tid) return;
@@ -103,8 +96,7 @@ export async function notifyClientKycResult(emp, approved, reason = '') {
     ? '✅ <b>KYC подтверждён</b>\n\nТеперь вы можете выводить аванс в личном кабинете.'
     : [
       '❌ <b>KYC отклонён</b>',
-      reason ? `\n\nПричина: ${escapeHtml(reason)}` : '',
-      '\n\nИсправьте фото и загрузите документы заново в разделе «Документы».',
+      '\nДокументы не прошли проверку. Загрузите их заново в разделе «Документы».',
     ].join('');
 
   try {

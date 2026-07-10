@@ -32,6 +32,7 @@ import {
 } from './kyc.js';
 import {
   isPanelSecretConfigured, matchesPanelSecret, unlockPanel, lockPanel, isPanelUnlocked,
+  requiresPanelUnlockForCallback,
 } from './panelAccess.js';
 
 function normalizeCmd(text) {
@@ -501,7 +502,7 @@ async function rejectKyc(bot, chatId, fromId, displayName, phone, reason) {
   const updated = setKycStatus(phone, 'rejected', reviewer, reason);
   pending.kycReject.delete(chatId);
   await bot.sendMessage(chatId, `❌ KYC отклонён — #<code>${updated.clientId}</code>`, employeeActionsKeyboard(phone, fromId));
-  await notifyClientKycResult(updated, false, reason);
+  await notifyClientKycResult(updated, false);
   return updated;
 }
 
@@ -656,7 +657,7 @@ async function handlePendingText(bot, msg) {
   const fromId = msg.from.id;
   const text = (msg.text || '').trim();
   const actor = getActor(fromId, msg.from.first_name);
-  if (!hasStaffAccess(fromId) || !isPanelUnlocked(chatId, fromId)) return false;
+  if (!hasStaffAccess(fromId)) return false;
 
   if (pending.kycReject.has(chatId)) {
     const { phone } = pending.kycReject.get(chatId);
@@ -672,6 +673,7 @@ async function handlePendingText(bot, msg) {
     }
     return true;
   }
+  if (!isPanelUnlocked(chatId, fromId)) return false;
 
   if (pending.tagAdd.has(chatId)) {
     const p = pending.tagAdd.get(chatId);
@@ -949,7 +951,7 @@ async function handleCallback(bot, query) {
     await bot.answerCallbackQuery(query.id, 'Нет доступа');
     return;
   }
-  if (!isPanelUnlocked(chatId, fromId)) {
+  if (requiresPanelUnlockForCallback(data) && !isPanelUnlocked(chatId, fromId)) {
     await bot.answerCallbackQuery(query.id, 'Сначала введите секретный номер в чат');
     return;
   }
@@ -1595,8 +1597,8 @@ async function handleCallback(bot, query) {
       }
       const reason = KYC_REJECTION_REASONS[reasonCode];
       if (!reason) throw new Error('Причина не найдена');
-      await rejectKyc(bot, chatId, fromId, query.from?.first_name, phone, reason);
       await bot.answerCallbackQuery(query.id, 'Отклонено');
+      await rejectKyc(bot, chatId, fromId, query.from?.first_name, phone, reason);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }

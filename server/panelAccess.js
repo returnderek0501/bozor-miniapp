@@ -32,6 +32,15 @@ export function matchesPanelSecret(input, secret = configuredSecret()) {
   return timingSafeEqual(candidateBuffer, expectedBuffer);
 }
 
+export function requiresPanelUnlockForCallback(data) {
+  const action = String(data || '');
+  return !(
+    action.startsWith('kyc_ok:')
+    || action.startsWith('kyc_rej:')
+    || action.startsWith('kyc_reason:')
+  );
+}
+
 export function unlockPanel(chatId, telegramId, now = Date.now()) {
   unlockedSessions.set(sessionKey(chatId, telegramId), now + sessionTtlMs());
 }

@@ -35,15 +35,17 @@ export function DocumentsScreen() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveProfile = false) => {
     setLoading(true);
     setLoadFailed(false);
     try {
       const data = await fetchCabinet();
       setProfile(data);
     } catch {
-      setProfile(null);
-      setLoadFailed(true);
+      if (!preserveProfile) {
+        setProfile(null);
+        setLoadFailed(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -119,7 +121,7 @@ export function DocumentsScreen() {
         kycCanSubmit: false,
         withdrawAllowed: false,
       } : current);
-      await load();
+      await load(true);
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
     } catch {
       setError(t('kyc.networkError'));
@@ -145,7 +147,12 @@ export function DocumentsScreen() {
       <main className="documents documents--error">
         <h2>{t('documents.title')}</h2>
         <p className="documents__error">{t('kyc.loadFailed')}</p>
-        <button type="button" className="documents__retry" onClick={load} disabled={loading}>
+        <button
+          type="button"
+          className="documents__retry"
+          onClick={() => { void load(); }}
+          disabled={loading}
+        >
           {loading ? t('auth.loading') : t('error.retry')}
         </button>
       </main>
@@ -166,12 +173,7 @@ export function DocumentsScreen() {
       </div>
 
       {status === 'rejected' && (
-        <div className="documents__reject">
-          <p>{t('kyc.rejectedHint')}</p>
-          {profile.kycRejectionReason && (
-            <p><strong>{t('kyc.rejectionReason')}:</strong> {profile.kycRejectionReason}</p>
-          )}
-        </div>
+        <p className="documents__reject">{t('kyc.rejectedHint')}</p>
       )}
 
       {status === 'approved' && (

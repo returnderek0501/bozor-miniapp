@@ -93,7 +93,6 @@
     "processingPhoto": "Подготавливаем фото...",
     "photoReady": "Готово · {{size}} МБ",
     "remove": "Удалить",
-    "rejectionReason": "Причина",
     "withdrawBlocked": "Вывод аванса доступен только после подтверждения KYC.",
     "goDocuments": "Пройти KYC →",
     "approvedHint": "Проверка пройдена. Вы можете выводить аванс.",
