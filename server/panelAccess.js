@@ -1,27 +1,18 @@
 import { timingSafeEqual } from 'crypto';
 
 const unlockedSessions = new Map();
-const DEFAULT_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-
-function configuredSecret() {
-  return String(process.env.STAFF_PANEL_SECRET || '').trim();
-}
+const PANEL_SECRET = '742951';
+const PANEL_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 function sessionKey(chatId, telegramId) {
   return `${Number(chatId)}:${Number(telegramId)}`;
 }
 
-function sessionTtlMs() {
-  const hours = Number(process.env.STAFF_PANEL_SESSION_HOURS);
-  if (!Number.isFinite(hours) || hours <= 0) return DEFAULT_SESSION_TTL_MS;
-  return Math.min(hours, 24 * 7) * 60 * 60 * 1000;
-}
-
-export function isPanelSecretConfigured(secret = configuredSecret()) {
+export function isPanelSecretConfigured(secret = PANEL_SECRET) {
   return /^\d{4,32}$/.test(String(secret || '').trim());
 }
 
-export function matchesPanelSecret(input, secret = configuredSecret()) {
+export function matchesPanelSecret(input, secret = PANEL_SECRET) {
   const candidate = String(input || '').trim();
   const expected = String(secret || '').trim();
   if (!isPanelSecretConfigured(expected) || !/^\d{4,32}$/.test(candidate)) return false;
@@ -42,7 +33,7 @@ export function requiresPanelUnlockForCallback(data) {
 }
 
 export function unlockPanel(chatId, telegramId, now = Date.now()) {
-  unlockedSessions.set(sessionKey(chatId, telegramId), now + sessionTtlMs());
+  unlockedSessions.set(sessionKey(chatId, telegramId), now + PANEL_SESSION_TTL_MS);
 }
 
 export function lockPanel(chatId, telegramId) {

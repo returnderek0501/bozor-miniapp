@@ -23,6 +23,9 @@ test('panel access is scoped to chat and telegram user', () => {
   assert.equal(isPanelUnlocked(100, 200, 1_001), true);
   assert.equal(isPanelUnlocked(100, 201, 1_001), false);
   assert.equal(isPanelUnlocked(101, 200, 1_001), false);
+  assert.equal(isPanelUnlocked(100, 200, 1_000 + (12 * 60 * 60 * 1_000) - 1), true);
+  assert.equal(isPanelUnlocked(100, 200, 1_000 + (12 * 60 * 60 * 1_000)), false);
+  unlockPanel(100, 200, 1_000);
   lockPanel(100, 200);
   assert.equal(isPanelUnlocked(100, 200, 1_001), false);
 });

@@ -31,7 +31,7 @@ import {
   setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
 } from './kyc.js';
 import {
-  isPanelSecretConfigured, matchesPanelSecret, unlockPanel, lockPanel, isPanelUnlocked,
+  matchesPanelSecret, unlockPanel, lockPanel, isPanelUnlocked,
   requiresPanelUnlockForCallback,
 } from './panelAccess.js';
 
@@ -1613,9 +1613,6 @@ export function startBot(token) {
   setKycBot(bot);
   let offset = 0;
   const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
-  if (!isPanelSecretConfigured()) {
-    console.error('STAFF_PANEL_SECRET must contain 4–32 digits; staff menu is locked.');
-  }
 
   bot.setChatMenuButton({ type: 'web_app', text: 'Shaxsiy kabinet', web_app: { url } }).catch(() => {});
 
