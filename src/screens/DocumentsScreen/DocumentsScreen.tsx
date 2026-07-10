@@ -49,7 +49,24 @@ export function DocumentsScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void fetchCabinet()
+      .then(data => {
+        if (!active) return;
+        setProfile(data);
+        setLoadFailed(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setProfile(null);
+        setLoadFailed(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const handleFile = async (file: File | undefined, type: KycFileType) => {
     if (!file) return;

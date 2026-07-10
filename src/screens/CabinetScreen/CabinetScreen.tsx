@@ -27,7 +27,20 @@ export function CabinetScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void fetchCabinet()
+      .then(data => {
+        if (active) setProfile(data);
+      })
+      .catch(() => {
+        if (active) setProfile(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const handleWithdrawSuccess = (balance: number) => {
     setProfile(prev => prev ? { ...prev, advanceBalance: balance } : prev);

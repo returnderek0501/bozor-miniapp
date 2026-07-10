@@ -17,24 +17,22 @@ export default function App() {
   const [state, setState] = useState<AppState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const refreshAuth = useCallback(async () => {
-    const status = await checkAuthStatus();
-    if (status.authorized) {
-      setState('ready');
-      return status;
-    }
-    setState('auth');
-    return status;
-  }, []);
-
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.ready();
       tg.expand();
     }
-    refreshAuth();
-  }, [refreshAuth]);
+    let active = true;
+    void checkAuthStatus()
+      .then(status => {
+        if (active) setState(status.authorized ? 'ready' : 'auth');
+      })
+      .catch(() => {
+        if (active) setState('auth');
+      });
+    return () => { active = false; };
+  }, []);
 
   const handleVerify = useCallback(async (phone: string) => {
     const result = await verifyPhone(phone);
