@@ -29,8 +29,8 @@ export function operatorStatsData() {
   return [...rows.values()].sort((a, b) => b.clients - a.clients || a.name.localeCompare(b.name, 'ru'));
 }
 
-export function todayClientsSummary() {
-  const today = listEmployees().filter(e => isToday(e.createdAt));
+export function todayClientsSummary(employees = listEmployees()) {
+  const today = employees.filter(e => isToday(e.createdAt));
   if (!today.length) return '<b>Клиенты за сегодня</b>\n\nПока никого не добавили.';
 
   const lines = today.map(e =>

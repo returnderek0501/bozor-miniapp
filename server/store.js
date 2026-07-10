@@ -305,6 +305,7 @@ export function setEmployeeField(rawPhone, field, value) {
     const num = Number(String(value).replace(/\s/g, ''));
     if (Number.isNaN(num)) throw new Error(mapped === 'age' ? 'Yosh raqam bo\'lishi kerak' : 'Balans raqam bo\'lishi kerak');
     if (mapped === 'age' && (num < 1 || num > 120)) throw new Error('Yosh 1–120 oralig\'ida bo\'lishi kerak');
+    if (mapped === 'advanceBalance' && num < 0) throw new Error('Баланс не может быть отрицательным');
     emp[mapped] = num;
   } else {
     emp[mapped] = value;

@@ -58,6 +58,7 @@ export function StaffDashboard({ onLogout }: Props) {
   const [reviewing, setReviewing] = useState(false);
   const [reason, setReason] = useState(REJECTION_REASONS[0]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -235,6 +236,12 @@ export function StaffDashboard({ onLogout }: Props) {
           <button type="button" onClick={() => setError('')}>×</button>
         </div>
       )}
+      {notice && (
+        <div className="staff-dashboard__notice">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice('')}>×</button>
+        </div>
+      )}
 
       <nav className="staff-dashboard__tabs">
         <button
@@ -341,6 +348,7 @@ export function StaffDashboard({ onLogout }: Props) {
           onCloseClient={() => setSelectedClientId(null)}
           onRefresh={refresh}
           onError={setError}
+          onNotice={setNotice}
           onOpenKyc={client => {
             setSelectedClientId(null);
             void openDocuments(client);
@@ -357,6 +365,7 @@ export function StaffDashboard({ onLogout }: Props) {
           onCloseClient={() => setSelectedClientId(null)}
           onRefresh={refresh}
           onError={setError}
+          onNotice={setNotice}
           onOpenKyc={client => {
             setSelectedClientId(null);
             void openDocuments(client);

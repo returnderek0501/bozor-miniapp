@@ -44,6 +44,7 @@ interface Props {
   onCloseClient: () => void;
   onRefresh: () => Promise<void>;
   onError: (message: string) => void;
+  onNotice: (message: string) => void;
   onOpenKyc: (client: StaffClient) => void;
 }
 
@@ -109,6 +110,7 @@ export function StaffTools({
   onCloseClient,
   onRefresh,
   onError,
+  onNotice,
   onOpenKyc,
 }: Props) {
   const [tool, setTool] = useState<Tool>(null);
@@ -350,7 +352,7 @@ export function StaffTools({
       setNewClientPhone('');
       setTool(null);
       await onRefresh();
-      onError(`Клиент #${response.client.clientId} добавлен.`);
+      onNotice(`Клиент #${response.client.clientId} добавлен.`);
     } catch {
       fail('Проверьте телефон и имя оператора.');
     } finally {
@@ -441,7 +443,10 @@ export function StaffTools({
       {showActions && (
         <>
           <section className="staff-actions-grid">
-            <ActionButton icon="➕" title="Добавить клиента" subtitle="Телефон и оператор" onClick={() => setTool('add')} />
+            <ActionButton icon="➕" title="Добавить клиента" subtitle="Телефон и оператор" onClick={() => {
+              setNewClientOperator(deskName);
+              setTool('add');
+            }} />
             <ActionButton icon="📅" title="Сегодня" subtitle="Новые клиенты" onClick={() => { void openToday(); }} />
             <ActionButton icon="🏷" title="Справочник тегов" subtitle="Создать и удалить" onClick={() => { void openCatalog(); }} />
             <ActionButton icon="✅" title="Подтверждения" subtitle="Ожидающие рассылки" onClick={() => { void openApprovals(); }} />
@@ -538,7 +543,10 @@ export function StaffTools({
       )}
 
       {photoPreview && (
-        <ToolModal title="Фото тега" onClose={() => setPhotoPreview('')}>
+        <ToolModal title="Фото тега" onClose={() => {
+          URL.revokeObjectURL(photoPreview);
+          setPhotoPreview('');
+        }}>
           <img className="staff-tool-photo" src={photoPreview} alt="Фото тега" />
         </ToolModal>
       )}

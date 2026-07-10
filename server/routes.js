@@ -52,7 +52,7 @@ export function createApiRouter(botToken) {
     if (botToken && initData) {
       return validateInitData(initData, botToken);
     }
-    if (!botToken && req.query.demoId) {
+    if (!botToken && process.env.ALLOW_DEMO_AUTH === 'true' && req.query.demoId) {
       return { id: Number(req.query.demoId) || 0, first_name: 'Demo' };
     }
     return null;

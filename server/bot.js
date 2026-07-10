@@ -1013,7 +1013,12 @@ async function handleCallback(bot, query) {
 
   if (data === 'sum_today') {
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, todayClientsSummary(), panelKeyboard(fromId));
+    if (!isAdmin(fromId) && !ensureDeskOperatorForList(fromId)) {
+      await bot.sendMessage(chatId, 'Сначала укажите имя оператора.', operatorNamePickerKeyboard(fromId, 'set'));
+      return;
+    }
+    const employees = listEmployeesForUser(fromId, deskName(fromId));
+    await bot.sendMessage(chatId, todayClientsSummary(employees), panelKeyboard(fromId));
     return;
   }
 

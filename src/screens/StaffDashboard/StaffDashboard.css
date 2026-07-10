@@ -156,6 +156,29 @@
   font-size: 13px;
 }
 
+.staff-dashboard__notice {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: #e5f6e9;
+  color: #1a7f37;
+  font-size: 13px;
+}
+
+.staff-dashboard__notice button {
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+}
+
+[data-theme="dark"] .staff-dashboard__notice {
+  background: #102819;
+  color: #71d68b;
+}
+
 .staff-dashboard__error button {
   color: inherit;
   font-size: 20px;
