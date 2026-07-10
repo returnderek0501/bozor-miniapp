@@ -142,7 +142,7 @@ export function StaffDashboard({ onLogout }: Props) {
     setReviewing(true);
     try {
       await reviewKyc(documentClient.clientId, decision, decision === 'rejected' ? reason : '');
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
       closeDocuments();
       await refresh();
     } catch {
