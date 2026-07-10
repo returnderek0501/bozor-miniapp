@@ -3,8 +3,9 @@ import {
   isPhoneAllowed, getSession, setSession, normalizePhone,
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
   submitKyc, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
-  addPhone, setEmployeeField, setEmployeeOperator,
+  addPhone, setEmployeeOperator, updateEmployeeFields,
   addClientTag, addClientTagFreeform, removeClientTag, getClientTag,
+  listPhones, normalizePhoneForOperator,
 } from './store.js';
 import {
   saveKycBuffer, parseBase64Image, deleteKycDocuments, attachmentAbsolutePath,
@@ -200,18 +201,33 @@ export function createApiRouter(botToken) {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
     const phone = String(req.body?.phone || '').trim();
+    const normalizedPhone = normalizePhoneForOperator(phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ success: false, error: 'INVALID_PHONE' });
+    }
     const operatorName = String(req.body?.operatorName || staff.deskName || '').trim();
     if (!operatorName) {
       return res.status(400).json({ success: false, error: 'OPERATOR_NAME_REQUIRED' });
     }
     try {
+      if (listPhones().includes(normalizedPhone)) {
+        const existing = getEmployee(normalizedPhone);
+        if (!existing || !canManageClient(staff.tgUser.id, existing, staff.deskName)) {
+          return res.status(404).json({ success: false, error: 'CLIENT_NOT_FOUND' });
+        }
+        return res.status(409).json({
+          success: false,
+          error: 'CLIENT_EXISTS',
+          client: staffClientSummary(existing),
+        });
+      }
       const actor = {
         ...staff.actor,
         name: operatorName,
         operatorName,
         deskOperatorName: operatorName,
       };
-      const normalizedPhone = addPhone(phone, actor);
+      addPhone(normalizedPhone, actor);
       if (!staff.isAdmin) rememberDeskOperatorName(staff.tgUser.id, operatorName);
       return res.json({ success: true, client: staffClientDetail(getEmployee(normalizedPhone)) });
     } catch (error) {
@@ -234,10 +250,10 @@ export function createApiRouter(botToken) {
     const updates = Object.entries(fields).filter(([key]) => Object.hasOwn(req.body || {}, key));
     if (!updates.length) return res.status(400).json({ success: false, error: 'NO_FIELDS' });
     try {
-      let updated = employee;
-      for (const [key, storeField] of updates) {
-        updated = setEmployeeField(employee.phone, storeField, req.body[key]);
-      }
+      const storeUpdates = Object.fromEntries(
+        updates.map(([key, storeField]) => [storeField, req.body[key]]),
+      );
+      const updated = updateEmployeeFields(employee.phone, storeUpdates);
       return res.json({ success: true, client: staffClientDetail(updated) });
     } catch (error) {
       return routeError(res, error, 'CLIENT_UPDATE_FAILED');

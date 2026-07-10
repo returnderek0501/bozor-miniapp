@@ -289,32 +289,41 @@ const EMPLOYEE_FIELDS = {
   operator: 'operator', oper: 'operator',
 };
 
-export function setEmployeeField(rawPhone, field, value) {
-  const phone = resolvePhoneKey(rawPhone);
-  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
-
-  const mapped = EMPLOYEE_FIELDS[field.toLowerCase()];
+function normalizeEmployeeField(field, value) {
+  const mapped = EMPLOYEE_FIELDS[String(field).toLowerCase()];
   if (!mapped) {
     throw new Error('Noma\'lum maydon. Mavjud: name, age, marital, balance, id, operator');
   }
-
-  const all = readEmployees();
-  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
-
   if (mapped === 'advanceBalance' || mapped === 'age') {
     const num = Number(String(value).replace(/\s/g, ''));
     if (Number.isNaN(num)) throw new Error(mapped === 'age' ? 'Yosh raqam bo\'lishi kerak' : 'Balans raqam bo\'lishi kerak');
     if (mapped === 'age' && (num < 1 || num > 120)) throw new Error('Yosh 1–120 oralig\'ida bo\'lishi kerak');
     if (mapped === 'advanceBalance' && num < 0) throw new Error('Баланс не может быть отрицательным');
-    emp[mapped] = num;
-  } else {
-    emp[mapped] = value;
+    return [mapped, num];
   }
+  return [mapped, value];
+}
+
+export function updateEmployeeFields(rawPhone, updates) {
+  const phone = resolvePhoneKey(rawPhone);
+  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
+
+  const normalizedUpdates = Object.entries(updates || {})
+    .map(([field, value]) => normalizeEmployeeField(field, value));
+  if (!normalizedUpdates.length) throw new Error('Ma\'lumotlar berilmagan');
+
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  for (const [mapped, value] of normalizedUpdates) emp[mapped] = value;
 
   emp.updatedAt = new Date().toISOString();
   all[phone] = emp;
   writeEmployees(all);
   return emp;
+}
+
+export function setEmployeeField(rawPhone, field, value) {
+  return updateEmployeeFields(rawPhone, { [field]: value });
 }
 
 export function setEmployeeOperator(rawPhone, operatorName, operatorId = '') {

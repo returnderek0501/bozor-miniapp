@@ -466,7 +466,7 @@ export function StaffTools({
         </>
       )}
 
-      {selectedClientId && detail && (
+      {selectedClientId && detail?.clientId === selectedClientId && (
         <ToolModal title={`Клиент #${detail.clientId}`} onClose={onCloseClient} wide>
           <div className="staff-client-detail__summary">
             <strong>{detail.fullName || 'Имя не заполнено'}</strong>
