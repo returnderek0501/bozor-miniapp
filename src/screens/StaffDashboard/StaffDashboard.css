@@ -222,11 +222,19 @@
 }
 
 .staff-client-card {
+  display: block;
+  width: 100%;
   padding: 15px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  color: var(--text);
+  text-align: left;
+}
+
+.staff-client-card--button:hover {
+  border-color: var(--brand-blue);
 }
 
 .staff-client-card--kyc {
@@ -428,12 +436,322 @@
   color: #fff;
 }
 
+.staff-kyc-modal__reviewed {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.staff-actions-title {
+  margin: 22px 0 10px;
+  font-size: 15px;
+}
+
+.staff-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.staff-action-card {
+  display: grid;
+  min-height: 118px;
+  align-content: start;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  text-align: left;
+}
+
+.staff-action-card > span {
+  margin-bottom: 9px;
+  font-size: 24px;
+}
+
+.staff-action-card strong {
+  font-size: 14px;
+}
+
+.staff-action-card small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.staff-tool-modal {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-top: 24px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.staff-tool-modal__sheet {
+  width: min(100%, 540px);
+  max-height: 94vh;
+  overflow-y: auto;
+  padding: 18px 16px calc(20px + env(safe-area-inset-bottom, 0));
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+}
+
+.staff-tool-modal__sheet--wide {
+  width: min(100%, 820px);
+}
+
+.staff-tool-modal__sheet > header {
+  position: sticky;
+  z-index: 2;
+  top: -18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -18px -16px 16px;
+  padding: 17px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.staff-tool-modal__sheet > header h2 {
+  font-size: 18px;
+}
+
+.staff-tool-modal__sheet > header button {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 23px;
+}
+
+.staff-client-detail__summary {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 15px;
+  padding: 13px;
+  border-radius: 10px;
+  background: var(--brand-blue-soft);
+}
+
+.staff-client-detail__summary span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.staff-tool-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.staff-tool-section h3,
+.staff-manage-grid h3 {
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.staff-tool-form {
+  display: grid;
+  gap: 10px;
+}
+
+.staff-tool-form--grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.staff-tool-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.staff-tool-form input,
+.staff-tool-form select,
+.staff-tool-form textarea,
+.staff-tool-inline input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.staff-tool-form textarea,
+.staff-tool-section textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.staff-tool-primary,
+.staff-tool-secondary {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 9px;
+  font-weight: 800;
+}
+
+.staff-tool-primary {
+  background: var(--brand-blue);
+  color: #fff;
+}
+
+.staff-tool-secondary {
+  border: 1px solid var(--brand-blue);
+  color: var(--brand-blue);
+}
+
+.staff-tool-link {
+  color: var(--brand-blue);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.staff-tool-inline {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.staff-tool-inline button,
+.staff-tool-list article > button {
+  flex-shrink: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-tool-list {
+  display: grid;
+  gap: 8px;
+}
+
+.staff-tool-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+}
+
+.staff-tool-list article > div {
+  display: grid;
+  min-width: 0;
+}
+
+.staff-tool-list article span,
+.staff-tool-list article small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.staff-detail-tags {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.staff-detail-tags article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.staff-detail-tags article > div:first-child {
+  display: grid;
+  font-size: 12px;
+}
+
+.staff-detail-tags small {
+  color: var(--text-muted);
+}
+
+.staff-detail-tags article > div:last-child {
+  display: flex;
+  gap: 5px;
+}
+
+.staff-detail-tags button {
+  padding: 5px 7px;
+  border-radius: 6px;
+  color: var(--brand-blue);
+  font-size: 11px;
+}
+
+.staff-tool-photo {
+  display: block;
+  width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.staff-manage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.staff-help {
+  display: grid;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 @media (max-width: 680px) {
   .staff-dashboard__stats {
     grid-template-columns: repeat(2, 1fr);
   }
 
   .staff-dashboard__list {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-tool-form--grid,
+  .staff-manage-grid {
     grid-template-columns: 1fr;
   }
 

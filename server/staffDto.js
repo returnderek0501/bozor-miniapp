@@ -19,3 +19,23 @@ export function staffClientSummary(emp) {
     profileComplete: isClientProfileComplete(emp),
   };
 }
+
+export function staffClientDetail(emp) {
+  return {
+    ...staffClientSummary(emp),
+    tags: (emp.tags || []).map(tag => ({
+      id: tag.id,
+      label: tag.label,
+      note: tag.note || '',
+      assignedAt: tag.assignedAt || null,
+      hasPhoto: Boolean(tag.photo?.path || tag.photo?.fileId),
+      webPhotoAvailable: Boolean(tag.photo?.path),
+    })),
+    kycReviewedByName: emp.kycReviewedByName || '',
+    hasKycDocuments: Boolean(
+      emp.kycDocuments?.idCardFront?.path
+      || emp.kycDocuments?.idCardBack?.path
+      || emp.kycDocuments?.selfie?.path
+    ),
+  };
+}

@@ -6,13 +6,14 @@ import {
   type StaffClient, type StaffDashboardData,
 } from '../../api/staff';
 import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
+import { StaffTools } from './StaffTools';
 import './StaffDashboard.css';
 
 interface Props {
   onLogout: () => void;
 }
 
-type Tab = 'kyc' | 'clients';
+type Tab = 'kyc' | 'clients' | 'actions';
 type DocumentUrls = Record<'idCardFront' | 'idCardBack' | 'selfie', string>;
 
 const REJECTION_REASONS = [
@@ -56,6 +57,7 @@ export function StaffDashboard({ onLogout }: Props) {
   const [loadingDocuments, setLoadingDocuments] = useState('');
   const [reviewing, setReviewing] = useState(false);
   const [reason, setReason] = useState(REJECTION_REASONS[0]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -249,6 +251,13 @@ export function StaffDashboard({ onLogout }: Props) {
         >
           Клиенты <span>{data?.clients.length || 0}</span>
         </button>
+        <button
+          type="button"
+          className={tab === 'actions' ? 'is-active' : ''}
+          onClick={() => setTab('actions')}
+        >
+          Действия
+        </button>
         <button type="button" className="staff-dashboard__refresh" onClick={refresh} disabled={loading}>
           ↻
         </button>
@@ -282,7 +291,7 @@ export function StaffDashboard({ onLogout }: Props) {
             </article>
           ))}
         </section>
-      ) : (
+      ) : tab === 'clients' ? (
         <section>
           <input
             className="staff-dashboard__search"
@@ -293,7 +302,12 @@ export function StaffDashboard({ onLogout }: Props) {
           />
           <div className="staff-dashboard__list">
             {visibleClients.map(client => (
-              <article className="staff-client-card" key={client.clientId}>
+              <button
+                type="button"
+                className="staff-client-card staff-client-card--button"
+                key={client.clientId}
+                onClick={() => setSelectedClientId(client.clientId)}
+              >
                 <div className="staff-client-card__top">
                   <div>
                     <span>{client.profileComplete ? '' : '⚠️ '}#{client.clientId}</span>
@@ -314,10 +328,40 @@ export function StaffDashboard({ onLogout }: Props) {
                     {client.tags.map(tag => <span key={tag.id}>{tag.label}</span>)}
                   </div>
                 )}
-              </article>
+              </button>
             ))}
           </div>
         </section>
+      ) : (
+        <StaffTools
+          role={data?.profile.role || 'operator'}
+          deskName={data?.profile.deskName || ''}
+          showActions
+          selectedClientId={selectedClientId}
+          onCloseClient={() => setSelectedClientId(null)}
+          onRefresh={refresh}
+          onError={setError}
+          onOpenKyc={client => {
+            setSelectedClientId(null);
+            void openDocuments(client);
+          }}
+        />
+      )}
+
+      {tab !== 'actions' && selectedClientId && (
+        <StaffTools
+          role={data?.profile.role || 'operator'}
+          deskName={data?.profile.deskName || ''}
+          showActions={false}
+          selectedClientId={selectedClientId}
+          onCloseClient={() => setSelectedClientId(null)}
+          onRefresh={refresh}
+          onError={setError}
+          onOpenKyc={client => {
+            setSelectedClientId(null);
+            void openDocuments(client);
+          }}
+        />
       )}
 
       {documentClient && documentUrls && (
@@ -335,30 +379,38 @@ export function StaffDashboard({ onLogout }: Props) {
               <figure><img src={documentUrls.idCardBack} alt="Обратная сторона ID-карты" /><figcaption>ID-карта · обратная</figcaption></figure>
               <figure><img src={documentUrls.selfie} alt="Селфи с ID-картой" /><figcaption>Селфи с документом</figcaption></figure>
             </div>
-            <label className="staff-kyc-modal__reason">
-              Причина отказа
-              <select value={reason} onChange={event => setReason(event.target.value)} disabled={reviewing}>
-                {REJECTION_REASONS.map(item => <option key={item}>{item}</option>)}
-              </select>
-            </label>
-            <div className="staff-kyc-modal__actions">
-              <button
-                type="button"
-                className="staff-kyc-modal__reject"
-                onClick={() => { void submitReview('rejected'); }}
-                disabled={reviewing}
-              >
-                Отклонить
-              </button>
-              <button
-                type="button"
-                className="staff-kyc-modal__approve"
-                onClick={() => { void submitReview('approved'); }}
-                disabled={reviewing}
-              >
-                {reviewing ? 'Сохраняем…' : 'Подтвердить'}
-              </button>
-            </div>
+            {documentClient.kycStatus === 'pending' ? (
+              <>
+                <label className="staff-kyc-modal__reason">
+                  Причина отказа
+                  <select value={reason} onChange={event => setReason(event.target.value)} disabled={reviewing}>
+                    {REJECTION_REASONS.map(item => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+                <div className="staff-kyc-modal__actions">
+                  <button
+                    type="button"
+                    className="staff-kyc-modal__reject"
+                    onClick={() => { void submitReview('rejected'); }}
+                    disabled={reviewing}
+                  >
+                    Отклонить
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-kyc-modal__approve"
+                    onClick={() => { void submitReview('approved'); }}
+                    disabled={reviewing}
+                  >
+                    {reviewing ? 'Сохраняем…' : 'Подтвердить'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="staff-kyc-modal__reviewed">
+                Решение уже принято: {statusLabel(documentClient.kycStatus)}
+              </p>
+            )}
           </div>
         </div>
       )}

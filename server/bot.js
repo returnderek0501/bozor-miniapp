@@ -30,6 +30,7 @@ import {
 import {
   setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
 } from './kyc.js';
+import { setStaffMessagingBot } from './staffMessaging.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -1583,6 +1584,7 @@ async function handleCallback(bot, query) {
 export function startBot(token) {
   const bot = createBotApi(token);
   setKycBot(bot);
+  setStaffMessagingBot(bot);
   let offset = 0;
   const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
 

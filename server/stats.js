@@ -10,6 +10,25 @@ function isToday(iso) {
     && d.getDate() === now.getDate();
 }
 
+export function isCreatedToday(iso) {
+  return isToday(iso);
+}
+
+export function operatorStatsData() {
+  const employees = listEmployees();
+  const rows = new Map();
+  for (const employee of employees) {
+    const name = employee.operator || employee.createdByName || 'Без оператора';
+    const row = rows.get(name) || { name, clients: 0, tags: {} };
+    row.clients += 1;
+    for (const tag of employee.tags || []) {
+      row.tags[tag.label || tag.id] = (row.tags[tag.label || tag.id] || 0) + 1;
+    }
+    rows.set(name, row);
+  }
+  return [...rows.values()].sort((a, b) => b.clients - a.clients || a.name.localeCompare(b.name, 'ru'));
+}
+
 export function todayClientsSummary() {
   const today = listEmployees().filter(e => isToday(e.createdAt));
   if (!today.length) return '<b>Клиенты за сегодня</b>\n\nПока никого не добавили.';

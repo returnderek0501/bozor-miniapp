@@ -56,6 +56,23 @@ export function saveKycBuffer(clientId, docType, buffer, ext = '.jpg') {
   };
 }
 
+export function saveTagBuffer(clientId, tagId, buffer, ext = '.jpg') {
+  const safeTagId = String(tagId || 'tag').replace(/[^a-z0-9_а-яё-]/gi, '_').slice(0, 48);
+  const dir = join(DATA_DIR, 'attachments', String(clientId));
+  mkdirSync(dir, { recursive: true });
+  const filename = `tag_${safeTagId}_${Date.now()}${ext}`;
+  const absolutePath = join(dir, filename);
+  writeFileSync(absolutePath, buffer);
+  return {
+    path: `attachments/${clientId}/${filename}`,
+    mimeType: ext.toLowerCase() === '.png'
+      ? 'image/png'
+      : ext.toLowerCase() === '.webp' ? 'image/webp' : 'image/jpeg',
+    size: buffer.length,
+    savedAt: new Date().toISOString(),
+  };
+}
+
 const KYC_MAX_FILE_BYTES = 3 * 1024 * 1024;
 const KYC_MIN_FILE_BYTES = 512;
 const MIME_EXTENSIONS = {
