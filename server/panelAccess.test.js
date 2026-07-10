@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isPanelSecretConfigured, matchesPanelSecret, unlockPanel, lockPanel, isPanelUnlocked,
-  requiresPanelUnlockForCallback,
+  isPanelSecretConfigured, matchesPanelSecret,
+  unlockStaffWeb, lockStaffWeb, isStaffWebUnlocked,
 } from './panelAccess.js';
 
 test('panel secret accepts only 4–32 digits', () => {
@@ -18,22 +18,18 @@ test('panel secret comparison trims input and rejects mismatches', () => {
   assert.equal(matchesPanelSecret('74295', '742951'), false);
 });
 
-test('panel access is scoped to chat and telegram user', () => {
-  unlockPanel(100, 200, 1_000);
-  assert.equal(isPanelUnlocked(100, 200, 1_001), true);
-  assert.equal(isPanelUnlocked(100, 201, 1_001), false);
-  assert.equal(isPanelUnlocked(101, 200, 1_001), false);
-  assert.equal(isPanelUnlocked(100, 200, 1_000 + (12 * 60 * 60 * 1_000) - 1), true);
-  assert.equal(isPanelUnlocked(100, 200, 1_000 + (12 * 60 * 60 * 1_000)), false);
-  unlockPanel(100, 200, 1_000);
-  lockPanel(100, 200);
-  assert.equal(isPanelUnlocked(100, 200, 1_001), false);
+test('web access is scoped to telegram user and expires after 12 hours', () => {
+  assert.equal(unlockStaffWeb(200, '742951', 1_000), true);
+  assert.equal(isStaffWebUnlocked(200, 1_001), true);
+  assert.equal(isStaffWebUnlocked(201, 1_001), false);
+  assert.equal(isStaffWebUnlocked(200, 1_000 + (12 * 60 * 60 * 1_000) - 1), true);
+  assert.equal(isStaffWebUnlocked(200, 1_000 + (12 * 60 * 60 * 1_000)), false);
+  assert.equal(unlockStaffWeb(200, '742951', 1_000), true);
+  lockStaffWeb(200);
+  assert.equal(isStaffWebUnlocked(200, 1_001), false);
 });
 
-test('direct KYC moderation remains available to authorized staff', () => {
-  assert.equal(requiresPanelUnlockForCallback('kyc_ok:998901234567'), false);
-  assert.equal(requiresPanelUnlockForCallback('kyc_rej:998901234567'), false);
-  assert.equal(requiresPanelUnlockForCallback('kyc_reason:blur:998901234567'), false);
-  assert.equal(requiresPanelUnlockForCallback('kyc_view:998901234567'), true);
-  assert.equal(requiresPanelUnlockForCallback('sum_today'), true);
+test('web access rejects a wrong code', () => {
+  assert.equal(unlockStaffWeb(300, '000000', 1_000), false);
+  assert.equal(isStaffWebUnlocked(300, 1_001), false);
 });

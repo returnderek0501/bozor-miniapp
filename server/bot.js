@@ -30,10 +30,6 @@ import {
 import {
   setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
 } from './kyc.js';
-import {
-  matchesPanelSecret, unlockPanel, lockPanel, isPanelUnlocked,
-  requiresPanelUnlockForCallback,
-} from './panelAccess.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -311,19 +307,6 @@ function tagsCatalogKeyboard(telegramId) {
   const rows = [[{ text: '➕ Добавить тег', callback_data: 'tag_add_new' }]];
   rows.push([{ text: '◀️ Панель', callback_data: 'noop_panel' }]);
   return ik(rows);
-}
-
-function miniAppReplyKeyboard() {
-  const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
-  return {
-    keyboard: [[{ text: '📱 Shaxsiy kabinetni ochish', web_app: { url } }]],
-    resize_keyboard: true,
-  };
-}
-
-function miniAppInlineKeyboard() {
-  const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
-  return ik([[{ text: '📱 Shaxsiy kabinet', web_app: { url } }]]);
 }
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -623,7 +606,7 @@ async function handleMediaMessage(bot, msg) {
   const chatId = msg.chat.id;
   const fromId = msg.from.id;
   const fileId = extractFileId(msg);
-  if (!fileId || !hasStaffAccess(fromId) || !isPanelUnlocked(chatId, fromId)) return;
+  if (!fileId || !hasStaffAccess(fromId)) return;
 
   const pFree = pending.tagFreeform.get(chatId);
   if (pFree) {
@@ -673,8 +656,6 @@ async function handlePendingText(bot, msg) {
     }
     return true;
   }
-  if (!isPanelUnlocked(chatId, fromId)) return false;
-
   if (pending.tagAdd.has(chatId)) {
     const p = pending.tagAdd.get(chatId);
     try {
@@ -881,7 +862,7 @@ async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/cancel')) {
     clearAllPending(chatId);
-    if (hasStaffAccess(fromId) && isPanelUnlocked(chatId, fromId)) {
+    if (hasStaffAccess(fromId)) {
       await bot.sendMessage(chatId, 'Отменено.', panelKeyboard(fromId));
     } else {
       await bot.sendMessage(chatId, 'Отменено.');
@@ -889,7 +870,7 @@ async function handleCommand(bot, msg) {
     return;
   }
 
-  if (matchCmd(text, '/skip') && isPanelUnlocked(chatId, fromId) && pending.tagAdd.has(chatId)) {
+  if (matchCmd(text, '/skip') && hasStaffAccess(fromId) && pending.tagAdd.has(chatId)) {
     const p = pending.tagAdd.get(chatId);
     try {
       requireClientAccess(fromId, p.phone);
@@ -905,24 +886,11 @@ async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/start')) {
     clearAllPending(chatId);
-    lockPanel(chatId, fromId);
-    await bot.sendMessage(chatId, '<b>Uztronix CRM</b>\n\nЛичный кабинет — Mini App.', { reply_markup: miniAppReplyKeyboard() });
-    await bot.sendMessage(chatId, 'Mini App:', miniAppInlineKeyboard());
-    return;
-  }
-
-  if (!text.startsWith('/') && hasStaffAccess(fromId) && matchesPanelSecret(text)) {
-    unlockPanel(chatId, fromId);
-    await openStaffPanel(bot, chatId, fromId);
     return;
   }
 
   if (matchCmd(text, '/admin', '/panel', '/operator') && hasStaffAccess(fromId)) {
-    if (isPanelUnlocked(chatId, fromId)) {
-      await openStaffPanel(bot, chatId, fromId);
-    } else {
-      await bot.sendMessage(chatId, 'Введите секретный номер для открытия служебного меню.');
-    }
+    await openStaffPanel(bot, chatId, fromId);
     return;
   }
 
@@ -930,12 +898,12 @@ async function handleCommand(bot, msg) {
 
   const cmd = text.split(/\s+/)[0].toLowerCase();
 
-  if (cmd === '/help' && hasStaffAccess(fromId) && isPanelUnlocked(chatId, fromId)) {
+  if (cmd === '/help' && hasStaffAccess(fromId)) {
     await bot.sendMessage(chatId, isAdmin(fromId) ? adminHelpText() : operatorHelpText(), panelKeyboard(fromId));
     return;
   }
 
-  if (cmd === '/export' && canExport(fromId) && isPanelUnlocked(chatId, fromId)) {
+  if (cmd === '/export' && canExport(fromId)) {
     await sendExport(bot, chatId);
   }
 }
@@ -949,10 +917,6 @@ async function handleCallback(bot, query) {
   const data = query.data || '';
   if (!hasStaffAccess(fromId)) {
     await bot.answerCallbackQuery(query.id, 'Нет доступа');
-    return;
-  }
-  if (requiresPanelUnlockForCallback(data) && !isPanelUnlocked(chatId, fromId)) {
-    await bot.answerCallbackQuery(query.id, 'Сначала введите секретный номер в чат');
     return;
   }
   const actor = getActor(fromId, query.from?.first_name);

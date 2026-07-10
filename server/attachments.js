@@ -32,7 +32,12 @@ export async function saveTelegramFile(bot, fileId, clientId, tagId) {
 }
 
 export function attachmentAbsolutePath(relativePath) {
-  return join(DATA_DIR, relativePath);
+  const attachmentsRoot = resolve(DATA_DIR, 'attachments');
+  const absolutePath = resolve(DATA_DIR, String(relativePath || ''));
+  if (!absolutePath.startsWith(`${attachmentsRoot}${sep}`)) {
+    throw new Error('INVALID_ATTACHMENT_PATH');
+  }
+  return absolutePath;
 }
 
 export function saveKycBuffer(clientId, docType, buffer, ext = '.jpg') {

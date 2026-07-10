@@ -9,8 +9,11 @@ import { DocumentsScreen } from './screens/DocumentsScreen/DocumentsScreen';
 import { BottomNav } from './components/BottomNav/BottomNav';
 import { Header } from './components/Header/Header';
 import { ThemeToggle } from './components/ThemeToggle/ThemeToggle';
+import { checkStaffStatus, lockStaff } from './api/staff';
+import { StaffGate } from './screens/StaffGate/StaffGate';
+import { StaffDashboard } from './screens/StaffDashboard/StaffDashboard';
 
-type AppState = 'loading' | 'auth' | 'denied' | 'ready';
+type AppState = 'loading' | 'staff-auth' | 'staff-ready' | 'auth' | 'denied' | 'ready';
 
 export default function App() {
   const { t } = useTranslation();
@@ -24,9 +27,15 @@ export default function App() {
       tg.expand();
     }
     let active = true;
-    void checkAuthStatus()
-      .then(status => {
-        if (active) setState(status.authorized ? 'ready' : 'auth');
+    void checkStaffStatus()
+      .then(async staffStatus => {
+        if (!active) return;
+        if (staffStatus.staff) {
+          setState(staffStatus.unlocked ? 'staff-ready' : 'staff-auth');
+          return;
+        }
+        const clientStatus = await checkAuthStatus();
+        if (active) setState(clientStatus.authorized ? 'ready' : 'auth');
       })
       .catch(() => {
         if (active) setState('auth');
@@ -50,6 +59,10 @@ export default function App() {
     }
   }, [t]);
 
+  const handleStaffLogout = useCallback(() => {
+    void lockStaff().finally(() => setState('staff-auth'));
+  }, []);
+
   if (state === 'loading') {
     return (
       <div className="app-loader">
@@ -64,6 +77,14 @@ export default function App() {
 
   if (state === 'auth') {
     return <AuthGate onVerify={handleVerify} />;
+  }
+
+  if (state === 'staff-auth') {
+    return <StaffGate onUnlocked={() => setState('staff-ready')} />;
+  }
+
+  if (state === 'staff-ready') {
+    return <StaffDashboard onLogout={handleStaffLogout} />;
   }
 
   if (state === 'denied') {

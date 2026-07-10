@@ -1,0 +1,90 @@
+.staff-gate {
+  min-height: 100%;
+  background: var(--bg);
+}
+
+.staff-gate__body {
+  min-height: calc(100vh - 3px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 64px 20px 32px;
+}
+
+.staff-gate__logo {
+  max-width: 220px;
+}
+
+.staff-gate__card {
+  width: 100%;
+  max-width: 400px;
+  padding: 24px 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.staff-gate__badge {
+  display: inline-flex;
+  margin-bottom: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--brand-blue-dark);
+  background: var(--brand-blue-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-gate__card h1 {
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+
+.staff-gate__card > p {
+  margin-bottom: 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.staff-gate__card input {
+  width: 100%;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
+.staff-gate__card input:focus {
+  border-color: var(--brand-blue);
+}
+
+.staff-gate__card button {
+  width: 100%;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--brand-blue);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.staff-gate__card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.staff-gate__error {
+  margin-top: 10px;
+  color: var(--error);
+  font-size: 13px;
+}

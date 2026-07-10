@@ -2,13 +2,24 @@ import { Router } from 'express';
 import {
   isPhoneAllowed, getSession, setSession, normalizePhone,
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
-  submitKyc,
+  submitKyc, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
 } from './store.js';
 import {
-  saveKycBuffer, parseBase64Image, deleteKycDocuments,
+  saveKycBuffer, parseBase64Image, deleteKycDocuments, attachmentAbsolutePath,
 } from './attachments.js';
 import { validateInitData } from './telegram.js';
-import { notifyOperatorKycReview } from './kyc.js';
+import { notifyOperatorKycReview, notifyClientKycResult } from './kyc.js';
+import {
+  hasStaffAccess, getActor, canManageClient,
+} from './permissions.js';
+import { isAdmin } from './admins.js';
+import {
+  getActiveDeskOperator, listRecentDeskNames, rememberDeskOperatorName, enrichActorWithDesk,
+} from './deskOperators.js';
+import {
+  unlockStaffWeb, lockStaffWeb, isStaffWebUnlocked,
+} from './panelAccess.js';
+import { staffClientSummary } from './staffDto.js';
 
 export function createApiRouter(botToken) {
   const router = Router();
@@ -35,6 +46,147 @@ export function createApiRouter(botToken) {
     if (!session?.phone || !isPhoneAllowed(session.phone)) return null;
     return { tgUser, phone: session.phone };
   }
+
+  function resolveStaffIdentity(req) {
+    const tgUser = resolveTelegramUser(req);
+    if (!tgUser || !hasStaffAccess(tgUser.id)) return null;
+    const deskName = getActiveDeskOperator(tgUser.id);
+    const actor = enrichActorWithDesk(
+      getActor(tgUser.id, `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim()),
+      tgUser.id,
+      deskName,
+    );
+    return { tgUser, actor, deskName, isAdmin: isAdmin(tgUser.id) };
+  }
+
+  function resolveUnlockedStaff(req) {
+    const staff = resolveStaffIdentity(req);
+    if (!staff || !isStaffWebUnlocked(staff.tgUser.id)) return null;
+    return staff;
+  }
+
+  function staffStatus(staff) {
+    return {
+      staff: true,
+      unlocked: isStaffWebUnlocked(staff.tgUser.id),
+      role: staff.isAdmin ? 'admin' : 'operator',
+      name: staff.actor?.name || staff.tgUser.first_name || '',
+      deskName: staff.deskName,
+      recentDeskNames: staff.isAdmin ? [] : listRecentDeskNames(staff.tgUser.id),
+    };
+  }
+
+  function requireStaffResponse(req, res) {
+    const staff = resolveUnlockedStaff(req);
+    if (!staff) {
+      res.status(401).json({ success: false, error: 'STAFF_SESSION_REQUIRED' });
+      return null;
+    }
+    return staff;
+  }
+
+  router.get('/staff/status', (req, res) => {
+    const tgUser = resolveTelegramUser(req);
+    if (!tgUser) {
+      return res.status(401).json({ staff: false, unlocked: false, error: 'INVALID_INIT_DATA' });
+    }
+    const staff = resolveStaffIdentity(req);
+    if (!staff) return res.json({ staff: false, unlocked: false });
+    return res.json(staffStatus(staff));
+  });
+
+  router.post('/staff/unlock', (req, res) => {
+    const staff = resolveStaffIdentity(req);
+    const code = String(req.body?.code || '').trim();
+    if (!staff || !unlockStaffWeb(staff.tgUser.id, code)) {
+      return res.status(403).json({ success: false, error: 'ACCESS_DENIED' });
+    }
+    return res.json({ success: true, ...staffStatus(staff) });
+  });
+
+  router.post('/staff/lock', (req, res) => {
+    const staff = resolveStaffIdentity(req);
+    if (staff) lockStaffWeb(staff.tgUser.id);
+    return res.json({ success: true });
+  });
+
+  router.post('/staff/desk', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    if (staff.isAdmin) return res.status(400).json({ success: false, error: 'DESK_NOT_REQUIRED' });
+    const name = String(req.body?.name || '').trim();
+    if (name.length < 2 || name.length > 80) {
+      return res.status(400).json({ success: false, error: 'INVALID_DESK_NAME' });
+    }
+    rememberDeskOperatorName(staff.tgUser.id, name);
+    return res.json({ success: true, deskName: name });
+  });
+
+  router.get('/staff/dashboard', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const clients = listEmployeesForUser(staff.tgUser.id, staff.deskName)
+      .map(staffClientSummary)
+      .sort((a, b) => Number(b.clientId || 0) - Number(a.clientId || 0));
+    return res.json({
+      profile: staffStatus(staff),
+      stats: {
+        clients: clients.length,
+        pendingKyc: clients.filter(client => client.kycStatus === 'pending').length,
+        incomplete: clients.filter(client => !client.profileComplete).length,
+        approvedKyc: clients.filter(client => client.kycStatus === 'approved').length,
+      },
+      clients,
+    });
+  });
+
+  router.get('/staff/kyc/:clientId/documents/:documentType', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const documentTypes = new Set(['idCardFront', 'idCardBack', 'selfie']);
+    if (!documentTypes.has(req.params.documentType)) {
+      return res.status(400).json({ error: 'INVALID_DOCUMENT_TYPE' });
+    }
+    const employee = findEmployeeByClientId(req.params.clientId);
+    if (!employee || !canManageClient(staff.tgUser.id, employee, staff.deskName)) {
+      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+    }
+    const document = employee.kycDocuments?.[req.params.documentType];
+    if (!document?.path) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    return res.sendFile(attachmentAbsolutePath(document.path), error => {
+      if (error && !res.headersSent) {
+        res.status(error.statusCode || 404).json({ error: 'DOCUMENT_NOT_FOUND' });
+      }
+    });
+  });
+
+  router.post('/staff/kyc/:clientId/review', async (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const employee = findEmployeeByClientId(req.params.clientId);
+    if (!employee || !canManageClient(staff.tgUser.id, employee, staff.deskName)) {
+      return res.status(404).json({ success: false, error: 'CLIENT_NOT_FOUND' });
+    }
+    if (employee.kycStatus !== 'pending') {
+      return res.status(409).json({ success: false, error: 'KYC_NOT_PENDING' });
+    }
+    const decision = req.body?.decision;
+    if (decision !== 'approved' && decision !== 'rejected') {
+      return res.status(400).json({ success: false, error: 'INVALID_DECISION' });
+    }
+    const reason = decision === 'rejected' ? String(req.body?.reason || '').trim() : '';
+    if (decision === 'rejected' && (reason.length < 3 || reason.length > 300)) {
+      return res.status(400).json({ success: false, error: 'INVALID_REJECTION_REASON' });
+    }
+    try {
+      const updated = setKycStatus(employee.phone, decision, staff.actor, reason);
+      await notifyClientKycResult(updated, decision === 'approved');
+      return res.json({ success: true, client: staffClientSummary(updated) });
+    } catch (error) {
+      const code = error.message === 'KYC_NOT_PENDING' ? 'KYC_NOT_PENDING' : 'KYC_REVIEW_FAILED';
+      return res.status(code === 'KYC_NOT_PENDING' ? 409 : 400).json({ success: false, error: code });
+    }
+  });
 
   router.get('/auth/status', (req, res) => {
     const ctx = resolveSession(req);
