@@ -2,10 +2,12 @@ import {
   useCallback, useEffect, useMemo, useState,
 } from 'react';
 import {
-  fetchKycDocument, fetchStaffDashboard, reviewKyc, selectDeskOperator,
-  type StaffClient, type StaffDashboardData,
+  assignClientTag, fetchKycDocument, fetchStaffDashboard, fetchStaffTags,
+  removeClientTag, reviewKyc, selectDeskOperator,
+  type StaffClient, type StaffDashboardData, type StaffTag,
 } from '../../api/staff';
 import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
+import { StaffClientGrid } from './StaffClientGrid';
 import { StaffTools } from './StaffTools';
 import './StaffDashboard.css';
 
@@ -15,6 +17,9 @@ interface Props {
 
 type Tab = 'kyc' | 'clients' | 'actions';
 type DocumentUrls = Record<'idCardFront' | 'idCardBack' | 'selfie', string>;
+type SortMode = 'activity_desc' | 'activity_asc' | 'created_desc' | 'client_desc'
+  | 'client_asc' | 'name_asc' | 'name_desc' | 'operator_asc';
+type ActivityWindow = 'all' | 'day' | 'week' | 'month';
 
 const REJECTION_REASONS = [
   'Фото размыто или нечитаемо',
@@ -22,10 +27,6 @@ const REJECTION_REASONS = [
   'Документ обрезан или закрыт',
   'Селфи не соответствует требованиям',
 ];
-
-function formatMoney(value: number) {
-  return Number(value || 0).toLocaleString('ru-RU');
-}
 
 function formatDate(value: string | null) {
   if (!value) return '—';
@@ -59,13 +60,25 @@ export function StaffDashboard({ onLogout }: Props) {
   const [reason, setReason] = useState(REJECTION_REASONS[0]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [tags, setTags] = useState<StaffTag[]>([]);
+  const [busyTagCells, setBusyTagCells] = useState<Set<string>>(new Set());
+  const [sortMode, setSortMode] = useState<SortMode>('activity_desc');
+  const [operatorFilter, setOperatorFilter] = useState('');
+  const [kycFilter, setKycFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [profileFilter, setProfileFilter] = useState('');
+  const [activityWindow, setActivityWindow] = useState<ActivityWindow>('all');
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const dashboard = await fetchStaffDashboard();
+      const [dashboard, tagData] = await Promise.all([
+        fetchStaffDashboard(),
+        fetchStaffTags(),
+      ]);
       setData(dashboard);
+      setTags(tagData.tags);
       setDeskName(dashboard.profile.deskName || '');
     } catch (requestError) {
       if (requestError instanceof Error && requestError.name === '401') {
@@ -80,10 +93,11 @@ export function StaffDashboard({ onLogout }: Props) {
 
   useEffect(() => {
     let active = true;
-    void fetchStaffDashboard()
-      .then(dashboard => {
+    void Promise.all([fetchStaffDashboard(), fetchStaffTags()])
+      .then(([dashboard, tagData]) => {
         if (!active) return;
         setData(dashboard);
+        setTags(tagData.tags);
         setDeskName(dashboard.profile.deskName || '');
       })
       .catch(requestError => {
@@ -106,14 +120,84 @@ export function StaffDashboard({ onLogout }: Props) {
     [data],
   );
 
+  const operatorOptions = useMemo(
+    () => [...new Set((data?.clients || []).map(client => client.operator).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'ru')),
+    [data],
+  );
+
   const visibleClients = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const clients = data?.clients || [];
-    if (!query) return clients;
-    return clients.filter(client => [
-      client.clientId, client.fullName, client.phone, client.operator,
-    ].some(value => String(value || '').toLowerCase().includes(query)));
-  }, [data, search]);
+    let clients = [...(data?.clients || [])];
+    if (query) {
+      clients = clients.filter(client => [
+        client.clientId, client.fullName, client.phone, client.operator,
+      ].some(value => String(value || '').toLowerCase().includes(query)));
+    }
+
+    if (data?.profile.role !== 'admin') return clients;
+
+    if (operatorFilter) clients = clients.filter(client => client.operator === operatorFilter);
+    if (kycFilter) clients = clients.filter(client => client.kycStatus === kycFilter);
+    if (tagFilter === '__none__') clients = clients.filter(client => client.tags.length === 0);
+    else if (tagFilter) {
+      clients = clients.filter(client => client.tags.some(tag => tag.id === tagFilter));
+    }
+    if (profileFilter === 'complete') clients = clients.filter(client => client.profileComplete);
+    if (profileFilter === 'incomplete') clients = clients.filter(client => !client.profileComplete);
+
+    const activityCutoffs: Record<Exclude<ActivityWindow, 'all'>, number> = {
+      day: 24 * 60 * 60 * 1000,
+      week: 7 * 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000,
+    };
+    if (activityWindow !== 'all') {
+      const cutoff = Date.now() - activityCutoffs[activityWindow];
+      clients = clients.filter(client => Date.parse(client.updatedAt || '') >= cutoff);
+    }
+
+    const time = (value: string | null) => Date.parse(value || '') || 0;
+    const clientNumber = (client: StaffClient) => Number(client.clientId || 0);
+    clients.sort((a, b) => {
+      if (sortMode === 'activity_asc') return time(a.updatedAt) - time(b.updatedAt);
+      if (sortMode === 'created_desc') return time(b.createdAt) - time(a.createdAt);
+      if (sortMode === 'client_desc') return clientNumber(b) - clientNumber(a);
+      if (sortMode === 'client_asc') return clientNumber(a) - clientNumber(b);
+      if (sortMode === 'name_asc') return a.fullName.localeCompare(b.fullName, 'ru');
+      if (sortMode === 'name_desc') return b.fullName.localeCompare(a.fullName, 'ru');
+      if (sortMode === 'operator_asc') return a.operator.localeCompare(b.operator, 'ru');
+      return time(b.updatedAt) - time(a.updatedAt);
+    });
+    return clients;
+  }, [
+    activityWindow, data, kycFilter, operatorFilter, profileFilter, search, sortMode, tagFilter,
+  ]);
+
+  const toggleClientTag = async (client: StaffClient, tag: StaffTag, checked: boolean) => {
+    const cellKey = `${client.clientId}:${tag.id}`;
+    if (busyTagCells.has(cellKey)) return;
+    setBusyTagCells(current => new Set(current).add(cellKey));
+    try {
+      const response = checked
+        ? await assignClientTag(client.clientId, { tagId: tag.id })
+        : await removeClientTag(client.clientId, tag.id);
+      setData(current => current ? {
+        ...current,
+        clients: current.clients.map(item => (
+          item.clientId === client.clientId ? response.client : item
+        )),
+      } : current);
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } catch {
+      setError(checked ? 'Не удалось присвоить тег.' : 'Не удалось снять тег.');
+    } finally {
+      setBusyTagCells(current => {
+        const next = new Set(current);
+        next.delete(cellKey);
+        return next;
+      });
+    }
+  };
 
   const closeDocuments = () => {
     if (documentUrls) Object.values(documentUrls).forEach(URL.revokeObjectURL);
@@ -300,44 +384,99 @@ export function StaffDashboard({ onLogout }: Props) {
         </section>
       ) : tab === 'clients' ? (
         <section>
-          <input
-            className="staff-dashboard__search"
-            type="search"
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Поиск по имени, телефону или ID"
-          />
-          <div className="staff-dashboard__list">
-            {visibleClients.map(client => (
-              <button
-                type="button"
-                className="staff-client-card staff-client-card--button"
-                key={client.clientId}
-                onClick={() => setSelectedClientId(client.clientId)}
-              >
-                <div className="staff-client-card__top">
-                  <div>
-                    <span>{client.profileComplete ? '' : '⚠️ '}#{client.clientId}</span>
-                    <h2>{client.fullName || 'Имя не заполнено'}</h2>
-                  </div>
-                  <span className={`staff-status staff-status--${client.kycStatus}`}>
-                    {statusLabel(client.kycStatus)}
-                  </span>
+          <div className="staff-client-grid__toolbar">
+            <input
+              className="staff-dashboard__search"
+              type="search"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Поиск по имени, телефону, оператору или ID"
+            />
+            {data?.profile.role === 'admin' && (
+              <>
+                <div className="staff-client-grid__filters">
+                  <label>
+                    <span>Сортировка</span>
+                    <select value={sortMode} onChange={event => setSortMode(event.target.value as SortMode)}>
+                      <option value="activity_desc">Недавние действия сверху</option>
+                      <option value="activity_asc">Старые действия сверху</option>
+                      <option value="created_desc">Сначала новые лиды</option>
+                      <option value="client_desc">ID: по убыванию</option>
+                      <option value="client_asc">ID: по возрастанию</option>
+                      <option value="name_asc">Имя: А–Я</option>
+                      <option value="name_desc">Имя: Я–А</option>
+                      <option value="operator_asc">Оператор: А–Я</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Активность</span>
+                    <select value={activityWindow} onChange={event => setActivityWindow(event.target.value as ActivityWindow)}>
+                      <option value="all">За всё время</option>
+                      <option value="day">За последние 24 часа</option>
+                      <option value="week">За последние 7 дней</option>
+                      <option value="month">За последние 30 дней</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Оператор</span>
+                    <select value={operatorFilter} onChange={event => setOperatorFilter(event.target.value)}>
+                      <option value="">Все операторы</option>
+                      {operatorOptions.map(operator => <option value={operator} key={operator}>{operator}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>KYC</span>
+                    <select value={kycFilter} onChange={event => setKycFilter(event.target.value)}>
+                      <option value="">Любой статус</option>
+                      <option value="none">Не пройден</option>
+                      <option value="pending">На проверке</option>
+                      <option value="approved">Подтверждён</option>
+                      <option value="rejected">Отклонён</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Тег</span>
+                    <select value={tagFilter} onChange={event => setTagFilter(event.target.value)}>
+                      <option value="">Любой тег</option>
+                      <option value="__none__">Без тегов</option>
+                      {tags.map(tag => <option value={tag.id} key={tag.id}>{tag.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Профиль</span>
+                    <select value={profileFilter} onChange={event => setProfileFilter(event.target.value)}>
+                      <option value="">Любой</option>
+                      <option value="complete">Заполнен</option>
+                      <option value="incomplete">Не заполнен</option>
+                    </select>
+                  </label>
                 </div>
-                <dl>
-                  <div><dt>Телефон</dt><dd>{client.phone}</dd></div>
-                  <div><dt>Оператор</dt><dd>{client.operator || '—'}</dd></div>
-                  <div><dt>ID кабинета</dt><dd>{client.employeeId || '—'}</dd></div>
-                  <div><dt>Аванс</dt><dd>{formatMoney(client.advanceBalance)} сум</dd></div>
-                </dl>
-                {!!client.tags.length && (
-                  <div className="staff-client-card__tags">
-                    {client.tags.map(tag => <span key={tag.id}>{tag.label}</span>)}
-                  </div>
-                )}
-              </button>
-            ))}
+                <div className="staff-client-grid__filter-summary">
+                  <span>Показано: {visibleClients.length} из {data.clients.length}</span>
+                  <button type="button" onClick={() => {
+                    setSearch('');
+                    setSortMode('activity_desc');
+                    setActivityWindow('all');
+                    setOperatorFilter('');
+                    setKycFilter('');
+                    setTagFilter('');
+                    setProfileFilter('');
+                  }}>
+                    Сбросить фильтры
+                  </button>
+                </div>
+              </>
+            )}
           </div>
+          <StaffClientGrid
+            clients={visibleClients}
+            tags={tags}
+            busyCells={busyTagCells}
+            onOpenClient={setSelectedClientId}
+            onToggleTag={(client, tag, checked) => {
+              void toggleClientTag(client, tag, checked);
+            }}
+          />
         </section>
       ) : (
         <StaffTools

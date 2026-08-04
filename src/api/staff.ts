@@ -53,6 +53,7 @@ export interface StaffClient {
     webPhotoAvailable?: boolean;
   }>;
   createdAt: string | null;
+  updatedAt: string | null;
   profileComplete: boolean;
   kycReviewedByName?: string;
   hasKycDocuments?: boolean;

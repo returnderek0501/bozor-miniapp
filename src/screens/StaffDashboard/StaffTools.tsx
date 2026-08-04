@@ -367,6 +367,7 @@ export function StaffTools({
       await createStaffTag(newTagLabel.trim());
       setNewTagLabel('');
       setTags((await fetchStaffTags()).tags);
+      await onRefresh();
     } catch {
       fail('Не удалось создать тег.');
     } finally {
@@ -379,6 +380,7 @@ export function StaffTools({
     try {
       await deleteStaffTag(tagId);
       setTags((await fetchStaffTags()).tags);
+      await onRefresh();
     } catch {
       fail('Этот тег нельзя удалить.');
     } finally {

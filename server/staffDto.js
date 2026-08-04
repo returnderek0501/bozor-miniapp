@@ -16,6 +16,7 @@ export function staffClientSummary(emp) {
     kycRejectionReason: emp.kycRejectionReason || '',
     tags: (emp.tags || []).map(tag => ({ id: tag.id, label: tag.label })),
     createdAt: emp.createdAt || null,
+    updatedAt: emp.updatedAt || emp.createdAt || null,
     profileComplete: isClientProfileComplete(emp),
   };
 }

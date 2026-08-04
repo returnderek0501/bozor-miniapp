@@ -30,6 +30,22 @@ test('updateEmployeeFields validates all values before writing', async () => {
       () => store.updateEmployeeFields(phone, { balance: -1 }),
       /отрицательным/,
     );
+
+    const beforeTagChange = employee.updatedAt;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const tagged = store.addClientTag(phone, 'pasport', { id: 7, name: 'Admin' });
+    assert.equal(tagged.tags.some(tag => tag.id === 'pasport'), true);
+    assert.equal(tagged.updatedAt > beforeTagChange, true);
+
+    const beforeTagRemoval = tagged.updatedAt;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const untagged = store.removeClientTag(phone, 'pasport', { id: 7, name: 'Admin' });
+    assert.equal(untagged.tags.some(tag => tag.id === 'pasport'), false);
+    assert.equal(untagged.updatedAt > beforeTagRemoval, true);
+    assert.deepEqual(
+      untagged.tagHistory.slice(-2).map(entry => entry.action),
+      ['add', 'remove'],
+    );
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }
