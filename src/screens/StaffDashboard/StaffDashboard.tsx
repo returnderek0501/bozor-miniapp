@@ -68,6 +68,7 @@ export function StaffDashboard({ onLogout }: Props) {
   const [tagFilter, setTagFilter] = useState('');
   const [profileFilter, setProfileFilter] = useState('');
   const [activityWindow, setActivityWindow] = useState<ActivityWindow>('all');
+  const [activitySince, setActivitySince] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -146,14 +147,8 @@ export function StaffDashboard({ onLogout }: Props) {
     if (profileFilter === 'complete') clients = clients.filter(client => client.profileComplete);
     if (profileFilter === 'incomplete') clients = clients.filter(client => !client.profileComplete);
 
-    const activityCutoffs: Record<Exclude<ActivityWindow, 'all'>, number> = {
-      day: 24 * 60 * 60 * 1000,
-      week: 7 * 24 * 60 * 60 * 1000,
-      month: 30 * 24 * 60 * 60 * 1000,
-    };
-    if (activityWindow !== 'all') {
-      const cutoff = Date.now() - activityCutoffs[activityWindow];
-      clients = clients.filter(client => Date.parse(client.updatedAt || '') >= cutoff);
+    if (activitySince !== null) {
+      clients = clients.filter(client => Date.parse(client.updatedAt || '') >= activitySince);
     }
 
     const time = (value: string | null) => Date.parse(value || '') || 0;
@@ -170,7 +165,7 @@ export function StaffDashboard({ onLogout }: Props) {
     });
     return clients;
   }, [
-    activityWindow, data, kycFilter, operatorFilter, profileFilter, search, sortMode, tagFilter,
+    activitySince, data, kycFilter, operatorFilter, profileFilter, search, sortMode, tagFilter,
   ]);
 
   const toggleClientTag = async (client: StaffClient, tag: StaffTag, checked: boolean) => {
@@ -410,7 +405,16 @@ export function StaffDashboard({ onLogout }: Props) {
                   </label>
                   <label>
                     <span>Активность</span>
-                    <select value={activityWindow} onChange={event => setActivityWindow(event.target.value as ActivityWindow)}>
+                    <select value={activityWindow} onChange={event => {
+                      const value = event.target.value as ActivityWindow;
+                      const durations: Record<Exclude<ActivityWindow, 'all'>, number> = {
+                        day: 24 * 60 * 60 * 1000,
+                        week: 7 * 24 * 60 * 60 * 1000,
+                        month: 30 * 24 * 60 * 60 * 1000,
+                      };
+                      setActivityWindow(value);
+                      setActivitySince(value === 'all' ? null : Date.now() - durations[value]);
+                    }}>
                       <option value="all">За всё время</option>
                       <option value="day">За последние 24 часа</option>
                       <option value="week">За последние 7 дней</option>
@@ -457,6 +461,7 @@ export function StaffDashboard({ onLogout }: Props) {
                     setSearch('');
                     setSortMode('activity_desc');
                     setActivityWindow('all');
+                    setActivitySince(null);
                     setOperatorFilter('');
                     setKycFilter('');
                     setTagFilter('');
