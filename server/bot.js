@@ -45,6 +45,24 @@ function matchCmd(text, ...cmds) {
   return cmds.includes(c);
 }
 
+const DEFAULT_MINI_APP_URL = 'https://bozor-miniapp-production.up.railway.app';
+
+export function miniAppUrl() {
+  return String(process.env.WEBAPP_URL || DEFAULT_MINI_APP_URL).trim();
+}
+
+export function miniAppLaunchKeyboard(url = miniAppUrl()) {
+  return ik([[
+    { text: '🚀 Открыть Mini App', web_app: { url } },
+  ]]);
+}
+
+export function matchesExpectedBotUsername(botInfo, expectedUsername) {
+  const expected = String(expectedUsername || '').trim().replace(/^@/, '').toLowerCase();
+  if (!expected) return true;
+  return String(botInfo?.username || '').trim().replace(/^@/, '').toLowerCase() === expected;
+}
+
 function deskName(fromId) {
   return getActiveDeskOperator(fromId);
 }
@@ -856,7 +874,7 @@ async function handlePendingText(bot, msg) {
   return false;
 }
 
-async function handleCommand(bot, msg) {
+export async function handleCommand(bot, msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
   const fromId = msg.from.id;
@@ -887,6 +905,11 @@ async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/start')) {
     clearAllPending(chatId);
+    await bot.sendMessage(
+      chatId,
+      '<b>Uztronix Mini App</b>\nНажмите кнопку ниже, чтобы открыть приложение.',
+      miniAppLaunchKeyboard(),
+    );
     return;
   }
 
@@ -1588,17 +1611,13 @@ async function handleCallback(bot, query) {
 
 export function startBot(token) {
   const bot = createBotApi(token);
-  setKycBot(bot);
-  setStaffMessagingBot(bot);
   let offset = 0;
-  const url = process.env.WEBAPP_URL || 'https://bozor-miniapp-production.up.railway.app';
-
-  bot.setChatMenuButton({ type: 'web_app', text: 'Shaxsiy kabinet', web_app: { url } }).catch(() => {});
 
   async function poll() {
     while (true) {
       try {
         const res = await bot.getUpdates(offset);
+        if (!res.ok) throw new Error(res.description || 'Telegram getUpdates failed');
         if (res.ok && res.result?.length) {
           for (const update of res.result) {
             offset = update.update_id + 1;
@@ -1616,6 +1635,43 @@ export function startBot(token) {
     }
   }
 
-  poll();
-  console.log('Uztronix CRM bot started');
+  async function bootstrap() {
+    try {
+      const identity = await bot.getMe();
+      if (!identity.ok || !identity.result?.username) {
+        throw new Error(identity.description || 'Telegram getMe failed');
+      }
+
+      const expectedUsername = process.env.EXPECTED_BOT_USERNAME;
+      if (!matchesExpectedBotUsername(identity.result, expectedUsername)) {
+        console.error([
+          'Telegram bot identity mismatch; polling was not started.',
+          `Expected: @${String(expectedUsername).replace(/^@/, '')}`,
+          `Received: @${identity.result.username} (${identity.result.id})`,
+        ].join(' '));
+        return;
+      }
+
+      console.log(`Telegram bot verified: @${identity.result.username} (${identity.result.id})`);
+      const webhook = await bot.deleteWebhook(false);
+      if (!webhook.ok) throw new Error(webhook.description || 'Telegram deleteWebhook failed');
+
+      setKycBot(bot);
+      setStaffMessagingBot(bot);
+      const menu = await bot.setChatMenuButton({
+        type: 'web_app',
+        text: 'Shaxsiy kabinet',
+        web_app: { url: miniAppUrl() },
+      });
+      if (!menu.ok) console.warn('Telegram menu button setup failed:', menu.description);
+
+      console.log('Uztronix CRM bot started');
+      await poll();
+    } catch (error) {
+      console.error('Telegram bot startup failed:', error.message);
+      setTimeout(() => { void bootstrap(); }, 5000);
+    }
+  }
+
+  void bootstrap();
 }

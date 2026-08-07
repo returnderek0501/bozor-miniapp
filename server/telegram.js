@@ -47,6 +47,11 @@ export function createBotApi(token) {
   }
 
   return {
+    getMe: () => call('getMe'),
+
+    deleteWebhook: (dropPendingUpdates = false) =>
+      call('deleteWebhook', { drop_pending_updates: dropPendingUpdates }),
+
     sendMessage: (chatId, text, extra = {}) =>
       call('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...extra }),
 
