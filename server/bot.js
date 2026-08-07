@@ -903,7 +903,7 @@ export async function handleCommand(bot, msg) {
 
   if (!text.startsWith('/') && await handlePendingText(bot, msg)) return;
 
-  if (matchCmd(text, '/start')) {
+  if (matchCmd(text, '/start', '/старт')) {
     clearAllPending(chatId);
     await bot.sendMessage(
       chatId,
