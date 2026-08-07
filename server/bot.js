@@ -31,6 +31,7 @@ import {
   setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
 } from './kyc.js';
 import { setStaffMessagingBot } from './staffMessaging.js';
+import { updateBotStatus } from './botStatus.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -905,11 +906,12 @@ export async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/start', '/старт')) {
     clearAllPending(chatId);
-    await bot.sendMessage(
+    const result = await bot.sendMessage(
       chatId,
       '<b>Uztronix Mini App</b>\nНажмите кнопку ниже, чтобы открыть приложение.',
       miniAppLaunchKeyboard(),
     );
+    if (!result?.ok) throw new Error(result?.description || 'Telegram sendMessage failed');
     return;
   }
 
@@ -1612,15 +1614,27 @@ async function handleCallback(bot, query) {
 export function startBot(token) {
   const bot = createBotApi(token);
   let offset = 0;
+  updateBotStatus({
+    configured: true,
+    state: 'starting',
+    expectedUsername: process.env.EXPECTED_BOT_USERNAME || null,
+    lastError: null,
+  });
 
   async function poll() {
     while (true) {
       try {
         const res = await bot.getUpdates(offset);
         if (!res.ok) throw new Error(res.description || 'Telegram getUpdates failed');
+        updateBotStatus({
+          state: 'polling',
+          lastError: null,
+          lastPollAt: new Date().toISOString(),
+        });
         if (res.ok && res.result?.length) {
           for (const update of res.result) {
             offset = update.update_id + 1;
+            updateBotStatus({ lastUpdateAt: new Date().toISOString() });
             if (update.message) {
               if (update.message.photo || update.message.document) await handleMediaMessage(bot, update.message);
               else await handleCommand(bot, update.message);
@@ -1630,6 +1644,7 @@ export function startBot(token) {
         }
       } catch (e) {
         console.error('Bot poll error:', e.message);
+        updateBotStatus({ state: 'polling_error', lastError: String(e.message).slice(0, 300) });
         await new Promise(r => setTimeout(r, 5000));
       }
     }
@@ -1644,6 +1659,12 @@ export function startBot(token) {
 
       const expectedUsername = process.env.EXPECTED_BOT_USERNAME;
       if (!matchesExpectedBotUsername(identity.result, expectedUsername)) {
+        updateBotStatus({
+          state: 'identity_mismatch',
+          username: identity.result.username,
+          id: identity.result.id,
+          lastError: `Expected @${String(expectedUsername).replace(/^@/, '')}, received @${identity.result.username}`,
+        });
         console.error([
           'Telegram bot identity mismatch; polling was not started.',
           `Expected: @${String(expectedUsername).replace(/^@/, '')}`,
@@ -1653,6 +1674,12 @@ export function startBot(token) {
       }
 
       console.log(`Telegram bot verified: @${identity.result.username} (${identity.result.id})`);
+      updateBotStatus({
+        state: 'verified',
+        username: identity.result.username,
+        id: identity.result.id,
+        lastError: null,
+      });
       const webhook = await bot.deleteWebhook(false);
       if (!webhook.ok) throw new Error(webhook.description || 'Telegram deleteWebhook failed');
 
@@ -1669,6 +1696,7 @@ export function startBot(token) {
       await poll();
     } catch (error) {
       console.error('Telegram bot startup failed:', error.message);
+      updateBotStatus({ state: 'startup_error', lastError: String(error.message).slice(0, 300) });
       setTimeout(() => { void bootstrap(); }, 5000);
     }
   }

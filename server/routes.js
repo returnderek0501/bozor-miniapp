@@ -40,12 +40,18 @@ import {
 import {
   sendClientMessage, executeBroadcast, notifyBroadcastApprovers,
 } from './staffMessaging.js';
+import { getBotStatus } from './botStatus.js';
 
 export function createApiRouter(botToken) {
   const router = Router();
 
   router.get('/health', (_req, res) => {
-    res.json({ ok: true, service: 'uztronix' });
+    const bot = getBotStatus();
+    res.json({
+      ok: true,
+      service: 'uztronix',
+      bot,
+    });
   });
 
   function resolveTelegramUser(req) {
