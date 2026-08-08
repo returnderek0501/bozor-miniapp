@@ -129,7 +129,7 @@ export function StaffDashboard({ onLogout }: Props) {
   );
 
   const visibleClients = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase().replace(/^@/, '');
     let clients = [...(data?.clients || [])];
     if (query) {
       clients = clients.filter(client => [
