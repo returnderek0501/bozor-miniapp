@@ -32,7 +32,7 @@ function escapeHtml(value) {
 
 export function tagActivityAnchor(employee) {
   const timestamps = [
-    Date.parse(employee.createdAt || '') || 0,
+    Date.parse(employee.createdAt || employee.updatedAt || '') || 0,
     ...(employee.tagHistory || [])
       .filter(event => event.action !== 'remove')
       .map(event => Date.parse(event.at || '') || 0),
