@@ -608,7 +608,7 @@ export function StaffTools({
           <div className="staff-tool-list">
             {tags.map(tag => (
               <article key={tag.id}>
-                <div><strong>{tag.label}</strong><span>{tag.scope === 'global' ? 'Общий' : 'Личный'}</span></div>
+                <div><strong>{tag.label}</strong><span>{tag.discovered ? 'Из карточек оператора' : tag.scope === 'global' ? 'Общий' : 'Личный'}</span></div>
                 {tag.canDelete && <button type="button" onClick={() => { void deleteTag(tag.id); }}>Удалить</button>}
               </article>
             ))}

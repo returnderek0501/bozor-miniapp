@@ -393,6 +393,13 @@ export function addClientTagFreeform(rawPhone, label, actor, extras = null) {
   return addClientTagInternal(rawPhone, tagId, trimmed, actor, extras);
 }
 
+export function addClientTagByDefinition(rawPhone, tagId, label, actor, extras = null) {
+  const normalizedId = String(tagId || '').trim();
+  const normalizedLabel = String(label || '').trim();
+  if (!normalizedId || !normalizedLabel) throw new Error('Тег не может быть пустым');
+  return addClientTagInternal(rawPhone, normalizedId, normalizedLabel, actor, extras);
+}
+
 function addClientTagInternal(rawPhone, tagId, label, actor, extras = null) {
   const phone = resolvePhoneKey(rawPhone);
   if (!phone) throw new Error('Noto\'g\'ri telefon');

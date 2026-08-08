@@ -2,9 +2,9 @@ import { Router } from 'express';
 import {
   isPhoneAllowed, getSession, setSession, touchSessionProfile, normalizePhone,
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
-  submitKyc, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
+  submitKyc, listEmployees, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
   addPhone, setEmployeeOperator, updateEmployeeFields,
-  addClientTag, addClientTagFreeform, removeClientTag, getClientTag,
+  addClientTag, addClientTagByDefinition, addClientTagFreeform, removeClientTag, getClientTag,
   listPhones, normalizePhoneForOperator,
 } from './store.js';
 import {
@@ -285,14 +285,33 @@ export function createApiRouter(botToken) {
   router.get('/staff/tags', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
+    const catalog = listTagsForUser(staff.tgUser.id).map((tag, index) => ({
+      ...tag,
+      protected: index < GLOBAL_TAG_COUNT,
+      canDelete: index >= GLOBAL_TAG_COUNT && (
+        staff.isAdmin || tag.ownerTelegramId === Number(staff.tgUser.id)
+      ),
+    }));
+    if (staff.isAdmin) {
+      const known = new Set(catalog.map(tag => tag.id));
+      for (const employee of listEmployees()) {
+        for (const tag of employee.tags || []) {
+          if (!tag.id || known.has(tag.id)) continue;
+          known.add(tag.id);
+          catalog.push({
+            id: tag.id,
+            label: tag.label || tag.id,
+            description: `Тег из карточек оператора ${employee.operator || '—'}`,
+            scope: 'operator',
+            discovered: true,
+            protected: false,
+            canDelete: false,
+          });
+        }
+      }
+    }
     return res.json({
-      tags: listTagsForUser(staff.tgUser.id).map((tag, index) => ({
-        ...tag,
-        protected: index < GLOBAL_TAG_COUNT,
-        canDelete: index >= GLOBAL_TAG_COUNT && (
-          staff.isAdmin || tag.ownerTelegramId === Number(staff.tgUser.id)
-        ),
-      })),
+      tags: catalog,
     });
   });
 
@@ -332,7 +351,13 @@ export function createApiRouter(botToken) {
     if (!tagId && !label) {
       return res.status(400).json({ success: false, error: 'TAG_REQUIRED' });
     }
-    if (tagId && !listTagsForUser(staff.tgUser.id).some(tag => tag.id === tagId)) {
+    const catalogTag = tagId
+      ? listTagsForUser(staff.tgUser.id).find(tag => tag.id === tagId)
+      : null;
+    const discoveredTag = tagId && !catalogTag && staff.isAdmin
+      ? listEmployees().flatMap(item => item.tags || []).find(tag => tag.id === tagId)
+      : null;
+    if (tagId && !catalogTag && !discoveredTag) {
       return res.status(404).json({ success: false, error: 'TAG_NOT_FOUND' });
     }
     let photo = null;
@@ -342,8 +367,16 @@ export function createApiRouter(botToken) {
         photo = saveTagBuffer(employee.clientId, tagId || label, parsed.buffer, parsed.ext);
       }
       const extras = { note: req.body?.note, photo };
-      const updated = tagId
+      const updated = catalogTag
         ? addClientTag(employee.phone, tagId, staff.actor, extras)
+        : discoveredTag
+          ? addClientTagByDefinition(
+            employee.phone,
+            discoveredTag.id,
+            discoveredTag.label || label || discoveredTag.id,
+            staff.actor,
+            extras,
+          )
         : addClientTagFreeform(employee.phone, label, staff.actor, extras);
       return res.json({ success: true, client: staffClientDetail(updated) });
     } catch (error) {

@@ -56,6 +56,16 @@ test('updateEmployeeFields validates all values before writing', async () => {
       untagged.tagHistory.slice(-2).map(entry => entry.action),
       ['add', 'remove'],
     );
+
+    const discoveredTag = store.addClientTagByDefinition(
+      phone,
+      'operator_custom_tag',
+      'Кастомный тег оператора',
+      { id: 7, name: 'Admin' },
+    );
+    assert.equal(discoveredTag.tags.some(tag => (
+      tag.id === 'operator_custom_tag' && tag.label === 'Кастомный тег оператора'
+    )), true);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }

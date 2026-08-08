@@ -179,7 +179,7 @@ export function StaffDashboard({ onLogout }: Props) {
     setBusyTagCells(current => new Set(current).add(cellKey));
     try {
       const response = checked
-        ? await assignClientTag(client.clientId, { tagId: tag.id })
+        ? await assignClientTag(client.clientId, { tagId: tag.id, label: tag.label })
         : await removeClientTag(client.clientId, tag.id);
       setData(current => current ? {
         ...current,

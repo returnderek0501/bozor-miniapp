@@ -133,6 +133,7 @@ export interface StaffTag {
   description?: string;
   scope?: 'global' | 'operator';
   ownerTelegramId?: number | null;
+  discovered?: boolean;
   protected?: boolean;
   canDelete?: boolean;
 }
