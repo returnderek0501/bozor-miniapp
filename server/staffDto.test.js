@@ -13,6 +13,8 @@ test('staff client summary exposes the latest activity timestamp', () => {
 
   assert.equal(summary.updatedAt, '2026-08-04T12:30:00.000Z');
   assert.deepEqual(summary.tags, [{ id: 'pasport', label: 'Паспорт получен' }]);
+  assert.equal(summary.telegramLinked, false);
+  assert.equal(summary.telegramId, null);
 });
 
 test('staff client summary falls back to creation time for legacy clients', () => {

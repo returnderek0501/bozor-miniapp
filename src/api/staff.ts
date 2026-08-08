@@ -55,6 +55,12 @@ export interface StaffClient {
   createdAt: string | null;
   updatedAt: string | null;
   profileComplete: boolean;
+  telegramId: number | null;
+  telegramUsername: string;
+  telegramDisplayName: string;
+  telegramLinked: boolean;
+  telegramLinkedAt: string | null;
+  telegramLastSeenAt: string | null;
   kycReviewedByName?: string;
   hasKycDocuments?: boolean;
 }
@@ -241,6 +247,32 @@ export function fetchOperatorStats(): Promise<{
   operators: Array<{ name: string; clients: number; tags: Record<string, number> }>;
 }> {
   return jsonRequest('/api/staff/summaries/operators');
+}
+
+export type StaffStatsRange = 'hour' | 'today' | 'day' | 'week' | 'month' | 'all';
+
+export interface StaffStatsData {
+  range: StaffStatsRange;
+  since: string | null;
+  generatedAt: string;
+  totals: {
+    clients: number;
+    clientsCreated: number;
+    tagAssignments: number;
+    tagRemovals: number;
+  };
+  operators: Array<{
+    name: string;
+    clientsTotal: number;
+    clientsCreated: number;
+    tagAssignments: number;
+    tagRemovals: number;
+    tags: Record<string, number>;
+  }>;
+}
+
+export function fetchStaffStats(range: StaffStatsRange): Promise<StaffStatsData> {
+  return jsonRequest(`/api/staff/stats?range=${encodeURIComponent(range)}`);
 }
 
 export function createStaffBroadcast(

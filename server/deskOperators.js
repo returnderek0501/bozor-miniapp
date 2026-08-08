@@ -29,6 +29,17 @@ export function listRecentDeskNames(telegramId) {
   return getDeskSession(telegramId).recentNames || [];
 }
 
+export function findTelegramIdByDeskName(name) {
+  const wanted = String(name || '').trim();
+  if (!wanted) return null;
+  for (const [telegramId, session] of Object.entries(readAll())) {
+    if (session?.activeName === wanted || (session?.recentNames || []).includes(wanted)) {
+      return Number(telegramId);
+    }
+  }
+  return null;
+}
+
 export function rememberDeskOperatorName(telegramId, name) {
   const trimmed = String(name || '').trim();
   if (!trimmed) return '';

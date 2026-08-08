@@ -1,9 +1,15 @@
 import { formatTagTime } from './tags.js';
 import { kycStatusLabel } from './kyc.js';
+import { getSessionByPhone } from './store.js';
 
 export const HEADERS_MAIN = [
   'ID клиента',
   'Телефон',
+  'Telegram ID',
+  'Telegram username',
+  'Имя в Telegram',
+  'Telegram привязан',
+  'Последний визит',
   'ФИО',
   'Должность',
   'Возраст',
@@ -71,9 +77,16 @@ function formatActiveTags(emp) {
 }
 
 export function rowFromEmployee(emp) {
+  const session = getSessionByPhone(emp.phone);
+  const telegramName = [session?.firstName, session?.lastName].filter(Boolean).join(' ');
   return [
     emp.clientId || '',
     emp.phone,
+    session?.telegramId || '',
+    session?.username ? `@${session.username}` : '',
+    telegramName,
+    session?.telegramId ? 'да' : 'нет',
+    session?.lastSeenAt ? formatTagTime(session.lastSeenAt) : '',
     emp.fullName || '',
     emp.position || 'Agent',
     emp.age ?? '',

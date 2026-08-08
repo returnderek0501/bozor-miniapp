@@ -217,23 +217,59 @@ export function listAllClientTelegramIds() {
 }
 
 export function getTelegramIdByPhone(phone) {
+  return getSessionByPhone(phone)?.telegramId || null;
+}
+
+export function getSessionByPhone(phone) {
   const normalized = normalizePhone(phone) || normalizePhoneForOperator(phone);
   const sessions = readAllSessions();
   for (const [tid, s] of Object.entries(sessions)) {
-    if (s?.phone === normalized) return Number(tid);
+    if (s?.phone === normalized) {
+      return {
+        ...s,
+        telegramId: Number(tid),
+        username: s.username || '',
+        firstName: s.firstName || '',
+        lastName: s.lastName || '',
+      };
+    }
   }
   return null;
 }
 
-export function setSession(telegramId, phone) {
+function telegramProfile(tgUser = {}) {
+  return {
+    username: String(tgUser.username || ''),
+    firstName: String(tgUser.first_name || tgUser.firstName || ''),
+    lastName: String(tgUser.last_name || tgUser.lastName || ''),
+  };
+}
+
+export function setSession(telegramId, phone, tgUser = {}) {
   const sessions = readJson(SESSIONS_FILE, {});
   const normalized = normalizePhone(phone) || normalizePhoneForOperator(phone);
+  const previous = sessions[String(telegramId)] || {};
   sessions[String(telegramId)] = {
     phone: normalized,
-    verifiedAt: new Date().toISOString(),
+    verifiedAt: previous.verifiedAt || new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    ...telegramProfile(tgUser),
   };
   writeJson(SESSIONS_FILE, sessions);
   return sessions[String(telegramId)];
+}
+
+export function touchSessionProfile(telegramId, tgUser = {}) {
+  const sessions = readJson(SESSIONS_FILE, {});
+  const key = String(telegramId);
+  if (!sessions[key]) return null;
+  sessions[key] = {
+    ...sessions[key],
+    ...telegramProfile(tgUser),
+    lastSeenAt: new Date().toISOString(),
+  };
+  writeJson(SESSIONS_FILE, sessions);
+  return sessions[key];
 }
 
 function readEmployees() {

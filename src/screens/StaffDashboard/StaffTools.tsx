@@ -15,11 +15,11 @@ import {
   deleteStaffTag,
   downloadStaffExport,
   fetchClientTagPhoto,
-  fetchOperatorStats,
   fetchPendingBroadcasts,
   fetchStaffAdmins,
   fetchStaffClient,
   fetchStaffOperators,
+  fetchStaffStats,
   fetchStaffTags,
   fetchTodayClients,
   removeClientTag,
@@ -29,6 +29,8 @@ import {
   type StaffAdmin,
   type StaffClient,
   type StaffOperator,
+  type StaffStatsData,
+  type StaffStatsRange,
   type StaffTag,
 } from '../../api/staff';
 import { prepareKycImage } from '../DocumentsScreen/kycImage';
@@ -63,6 +65,17 @@ const EMPTY_EDIT: EditValues = {
   employeeId: '',
   advanceBalance: '',
 };
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 function ToolModal({
   title, children, onClose, wide = false,
@@ -127,11 +140,8 @@ export function StaffTools({
   const [photoPreview, setPhotoPreview] = useState('');
   const [todayClients, setTodayClients] = useState<StaffClient[]>([]);
   const [pendingBroadcasts, setPendingBroadcasts] = useState<PendingBroadcast[]>([]);
-  const [operatorStats, setOperatorStats] = useState<Array<{
-    name: string;
-    clients: number;
-    tags: Record<string, number>;
-  }>>([]);
+  const [operatorStats, setOperatorStats] = useState<StaffStatsData | null>(null);
+  const [statsRange, setStatsRange] = useState<StaffStatsRange>('today');
   const [broadcastText, setBroadcastText] = useState('');
   const [broadcastScope, setBroadcastScope] = useState<'mine' | 'all'>('mine');
   const [operators, setOperators] = useState<StaffOperator[]>([]);
@@ -208,11 +218,12 @@ export function StaffTools({
     }
   };
 
-  const openOperatorStats = async () => {
+  const openOperatorStats = async (range: StaffStatsRange = statsRange) => {
     setTool('operatorStats');
     setBusy(true);
     try {
-      setOperatorStats((await fetchOperatorStats()).operators);
+      setStatsRange(range);
+      setOperatorStats(await fetchStaffStats(range));
     } catch {
       fail('Не удалось загрузить статистику операторов.');
     } finally {
@@ -458,7 +469,7 @@ export function StaffTools({
             <>
               <h2 className="staff-actions-title">Только администратор</h2>
               <section className="staff-actions-grid">
-                <ActionButton icon="📊" title="Сводка операторов" subtitle="Клиенты и теги" onClick={() => { void openOperatorStats(); }} />
+                <ActionButton icon="📊" title="Статистика" subtitle="Час, день, неделя и теги" onClick={() => { void openOperatorStats(); }} />
                 <ActionButton icon="✉️" title="Рассылка" subtitle="Моим или всем" onClick={() => setTool('broadcast')} />
                 <ActionButton icon="📥" title="Экспорт Excel" subtitle="Полный отчёт" onClick={() => { void downloadStaffExport().catch(() => fail('Экспорт не выполнен.')); }} />
                 <ActionButton icon="👥" title="Доступы" subtitle="Операторы и админы" onClick={() => { void loadStaff(); }} />
@@ -473,6 +484,17 @@ export function StaffTools({
           <div className="staff-client-detail__summary">
             <strong>{detail.fullName || 'Имя не заполнено'}</strong>
             <span>{detail.phone} · {detail.operator || 'без оператора'}</span>
+          </div>
+
+          <div className="staff-tool-section">
+            <h3>Telegram</h3>
+            {detail.telegramLinked ? (
+              <div className="staff-client-detail__summary">
+                <strong>{detail.telegramDisplayName || 'Имя не указано'}</strong>
+                <span>{detail.telegramUsername ? `@${detail.telegramUsername}` : 'без username'} · ID {detail.telegramId}</span>
+                <span>Привязан: {formatDate(detail.telegramLinkedAt)} · Последний визит: {formatDate(detail.telegramLastSeenAt)}</span>
+              </div>
+            ) : <p>Telegram не привязан — сообщения клиенту недоступны.</p>}
           </div>
 
           <div className="staff-tool-section">
@@ -574,9 +596,14 @@ export function StaffTools({
 
       {tool === 'catalog' && (
         <ToolModal title="Справочник тегов" onClose={() => setTool(null)}>
+          <p className="staff-tool-hint">
+            {role === 'admin'
+              ? 'Новый тег будет общим и сразу появится у всех операторов.'
+              : 'Новый тег будет личным и доступным только вам.'}
+          </p>
           <div className="staff-tool-inline">
-            <input value={newTagLabel} onChange={event => setNewTagLabel(event.target.value)} placeholder="Новый тег" />
-            <button type="button" onClick={() => { void createTag(); }}>Добавить</button>
+            <input value={newTagLabel} onChange={event => setNewTagLabel(event.target.value)} placeholder={role === 'admin' ? 'Новый общий тег' : 'Новый личный тег'} />
+            <button type="button" onClick={() => { void createTag(); }}>{role === 'admin' ? 'Добавить всем' : 'Добавить'}</button>
           </div>
           <div className="staff-tool-list">
             {tags.map(tag => (
@@ -604,13 +631,40 @@ export function StaffTools({
       )}
 
       {tool === 'operatorStats' && (
-        <ToolModal title="Сводка операторов" onClose={() => setTool(null)}>
+        <ToolModal title="Статистика операторов" onClose={() => setTool(null)} wide>
+          <div className="staff-tool-form">
+            <label>Период
+              <select value={statsRange} onChange={event => {
+                void openOperatorStats(event.target.value as StaffStatsRange);
+              }}>
+                <option value="hour">Последний час</option>
+                <option value="today">Сегодня (МСК)</option>
+                <option value="day">Последние 24 часа</option>
+                <option value="week">Последние 7 дней</option>
+                <option value="month">Последние 30 дней</option>
+                <option value="all">За всё время</option>
+              </select>
+            </label>
+          </div>
+          {operatorStats && (
+            <div className="staff-analytics-summary">
+              <article><strong>{operatorStats.totals.clientsCreated}</strong><span>Новых лидов</span></article>
+              <article><strong>{operatorStats.totals.tagAssignments}</strong><span>Тегов поставлено</span></article>
+              <article><strong>{operatorStats.totals.tagRemovals}</strong><span>Тегов снято</span></article>
+              <article><strong>{operatorStats.totals.clients}</strong><span>Всего лидов</span></article>
+            </div>
+          )}
           <div className="staff-tool-list">
-            {operatorStats.map(item => (
+            {operatorStats?.operators.map(item => (
               <article key={item.name}>
-                <div><strong>{item.name}</strong><span>Клиентов: {item.clients}</span><small>{Object.entries(item.tags).map(([name, count]) => `${name}: ${count}`).join(', ') || 'Тегов нет'}</small></div>
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>Лидов: {item.clientsTotal} · новых: {item.clientsCreated} · тегов: {item.tagAssignments} · снято: {item.tagRemovals}</span>
+                  <small>{Object.entries(item.tags).map(([name, count]) => `${name}: ${count}`).join(', ') || 'Тегов за период нет'}</small>
+                </div>
               </article>
             ))}
+            {!operatorStats?.operators.length && !busy && <p>За выбранный период действий нет.</p>}
           </div>
         </ToolModal>
       )}

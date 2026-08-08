@@ -32,6 +32,9 @@ import {
 } from './kyc.js';
 import { setStaffMessagingBot } from './staffMessaging.js';
 import { updateBotStatus } from './botStatus.js';
+import {
+  ignoreTagReminder, snoozeTagReminder, startTagReminderScheduler,
+} from './tagReminders.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -662,6 +665,26 @@ async function handlePendingText(bot, msg) {
   const actor = getActor(fromId, msg.from.first_name);
   if (!hasStaffAccess(fromId)) return false;
 
+  if (pending.tagReminderSnooze.has(chatId)) {
+    const { phone } = pending.tagReminderSnooze.get(chatId);
+    const hours = Number(text);
+    if (!Number.isInteger(hours) || hours < 1 || hours > 168) {
+      await bot.sendMessage(chatId, 'Введите целое количество часов от 1 до 168.');
+      return true;
+    }
+    pending.tagReminderSnooze.delete(chatId);
+    try {
+      const reminder = snoozeTagReminder(phone, hours);
+      await bot.sendMessage(
+        chatId,
+        `⏰ Напоминание отложено до <b>${new Date(reminder.snoozedUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} МСК</b>.`,
+      );
+    } catch (error) {
+      await bot.sendMessage(chatId, `❌ ${error.message}`);
+    }
+    return true;
+  }
+
   if (pending.kycReject.has(chatId)) {
     const { phone } = pending.kycReject.get(chatId);
     if (text.length < 3 || text.length > 300) {
@@ -946,6 +969,46 @@ async function handleCallback(bot, query) {
     return;
   }
   const actor = getActor(fromId, query.from?.first_name);
+
+  if (data.startsWith('tr_snz:')) {
+    const [, rawHours, digits] = data.split(':');
+    const phone = `+${digits || ''}`;
+    if (rawHours === 'custom') {
+      pending.tagReminderSnooze.set(chatId, { phone });
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, 'На сколько часов отложить? Введите число от 1 до 168.\n/cancel — отмена');
+      return;
+    }
+    try {
+      const reminder = snoozeTagReminder(phone, Number(rawHours));
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
+      await bot.answerCallbackQuery(
+        query.id,
+        `Отложено до ${new Date(reminder.snoozedUntil).toLocaleString('ru-RU', {
+          timeZone: 'Europe/Moscow',
+          hour: '2-digit',
+          minute: '2-digit',
+          day: '2-digit',
+          month: '2-digit',
+        })} МСК`,
+      );
+    } catch (error) {
+      await bot.answerCallbackQuery(query.id, error.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('tr_ign:')) {
+    const phone = `+${data.slice(7)}`;
+    try {
+      ignoreTagReminder(phone);
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
+      await bot.answerCallbackQuery(query.id, 'Напоминания для этого клиента отключены');
+    } catch (error) {
+      await bot.answerCallbackQuery(query.id, error.message);
+    }
+    return;
+  }
 
   const panelActions = new Set([
     'noop_panel', 'adm_panel', 'op_panel', 'adm_clients', 'op_clients', 'adm_add', 'op_add',
@@ -1685,6 +1748,7 @@ export function startBot(token) {
 
       setKycBot(bot);
       setStaffMessagingBot(bot);
+      startTagReminderScheduler(bot);
       const menu = await bot.setChatMenuButton({
         type: 'web_app',
         text: 'Shaxsiy kabinet',

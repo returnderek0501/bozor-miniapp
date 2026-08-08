@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  isPhoneAllowed, getSession, setSession, normalizePhone,
+  isPhoneAllowed, getSession, setSession, touchSessionProfile, normalizePhone,
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
   submitKyc, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
   addPhone, setEmployeeOperator, updateEmployeeFields,
@@ -33,7 +33,9 @@ import {
   listOperators, addOperatorByTelegramId, removeOperator,
 } from './operators.js';
 import { buildExcelBuffer, getExportFilename } from './export.js';
-import { isCreatedToday, operatorStatsData } from './stats.js';
+import {
+  isCreatedToday, operatorStatsData, staffStatsData, STATS_RANGES,
+} from './stats.js';
 import {
   createBroadcastRequest, listPendingBroadcasts, approveBroadcast,
 } from './broadcasts.js';
@@ -70,6 +72,7 @@ export function createApiRouter(botToken) {
     if (!tgUser) return null;
     const session = getSession(tgUser.id);
     if (!session?.phone || !isPhoneAllowed(session.phone)) return null;
+    touchSessionProfile(tgUser.id, tgUser);
     return { tgUser, phone: session.phone };
   }
 
@@ -405,6 +408,16 @@ export function createApiRouter(botToken) {
     return res.json({ operators: operatorStatsData() });
   });
 
+  router.get('/staff/stats', (req, res) => {
+    const staff = requireAdminResponse(req, res);
+    if (!staff) return;
+    const range = String(req.query.range || 'today');
+    if (!STATS_RANGES.has(range)) {
+      return res.status(400).json({ success: false, error: 'INVALID_STATS_RANGE' });
+    }
+    return res.json(staffStatsData(range));
+  });
+
   router.post('/staff/broadcasts', async (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
@@ -632,7 +645,7 @@ export function createApiRouter(botToken) {
       });
     }
 
-    setSession(tgUser.id, normalized);
+    setSession(tgUser.id, normalized, tgUser);
     const emp = getEmployee(normalized);
     res.json({
       authorized: true,

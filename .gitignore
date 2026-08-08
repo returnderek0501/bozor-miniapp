@@ -10,6 +10,7 @@ data/tags.json
 data/client_counter.json
 data/broadcasts.json
 data/desk_sessions.json
+data/tag_reminders.json
 data/attachments/
 attachments/
 data/admins.json

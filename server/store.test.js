@@ -11,6 +11,16 @@ test('updateEmployeeFields validates all values before writing', async () => {
 
   try {
     const phone = store.addPhone('+998901234567');
+    store.setSession(123456, phone, {
+      username: 'test_client',
+      first_name: 'Test',
+      last_name: 'Client',
+    });
+    const linkedSession = store.getSessionByPhone(phone);
+    assert.equal(linkedSession.telegramId, 123456);
+    assert.equal(linkedSession.username, 'test_client');
+    assert.equal(linkedSession.firstName, 'Test');
+
     store.updateEmployeeFields(phone, {
       name: 'Original Name',
       age: 30,

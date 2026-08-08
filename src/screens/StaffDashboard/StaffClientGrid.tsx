@@ -35,6 +35,7 @@ export function StaffClientGrid({
           <tr>
             <th className="staff-client-grid__lead">Лид</th>
             <th>Телефон</th>
+            <th>Telegram</th>
             <th>Оператор</th>
             <th>KYC</th>
             {tags.map(tag => (
@@ -55,6 +56,15 @@ export function StaffClientGrid({
                 </button>
               </td>
               <td>{client.phone}</td>
+              <td className="staff-client-grid__telegram">
+                {client.telegramLinked ? (
+                  <>
+                    <strong>{client.telegramDisplayName || 'Имя не указано'}</strong>
+                    <span>{client.telegramUsername ? `@${client.telegramUsername}` : 'без username'}</span>
+                    <code>{client.telegramId}</code>
+                  </>
+                ) : <span>Не привязан</span>}
+              </td>
               <td>{client.operator || '—'}</td>
               <td>
                 <span className={`staff-status staff-status--${client.kycStatus}`}>
@@ -79,7 +89,9 @@ export function StaffClientGrid({
                   </td>
                 );
               })}
-              <td className="staff-client-grid__activity">{formatDate(client.updatedAt)}</td>
+              <td className="staff-client-grid__activity" title={`Telegram: ${formatDate(client.telegramLastSeenAt)}`}>
+                {formatDate(client.updatedAt)}
+              </td>
             </tr>
           ))}
         </tbody>

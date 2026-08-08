@@ -16,12 +16,30 @@ import {
   sanitizeSheetName,
 } from './exportData.js';
 import { syncToGoogleSheets } from './sheets.js';
+import { staffStatsData } from './stats.js';
 
 const EXPORT_FILE = join(DATA_DIR, 'uztronix_export.xlsx');
 
 export function buildWorkbookData() {
   const employees = listEmployees();
+  const summaryRows = ['hour', 'today', 'week', 'month', 'all'].flatMap(range => {
+    const stats = staffStatsData(range, employees);
+    return stats.operators.map(operator => [
+      range,
+      operator.name,
+      operator.clientsTotal,
+      operator.clientsCreated,
+      operator.tagAssignments,
+      operator.tagRemovals,
+      Object.entries(operator.tags).map(([tag, count]) => `${tag}: ${count}`).join('; '),
+    ]);
+  });
   const sheets = [
+    {
+      name: 'Сводка',
+      headers: ['Период', 'Оператор', 'Всего лидов', 'Новых лидов', 'Тегов поставлено', 'Тегов снято', 'По тегам'],
+      rows: summaryRows,
+    },
     { name: 'Все лиды', headers: HEADERS_MAIN, rows: rowsFromEmployees(employees) },
     { name: 'История тегов', headers: HEADERS_TAG_HISTORY, rows: tagHistoryRows(employees) },
     { name: 'Фото', headers: HEADERS_PHOTOS, rows: photoRows(employees) },

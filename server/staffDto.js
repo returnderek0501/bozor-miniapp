@@ -1,6 +1,9 @@
 import { isClientProfileComplete } from './clientFields.js';
+import { getSessionByPhone } from './store.js';
 
 export function staffClientSummary(emp) {
+  const session = getSessionByPhone(emp.phone);
+  const telegramDisplayName = [session?.firstName, session?.lastName].filter(Boolean).join(' ');
   return {
     clientId: String(emp.clientId || ''),
     fullName: emp.fullName || '',
@@ -18,6 +21,12 @@ export function staffClientSummary(emp) {
     createdAt: emp.createdAt || null,
     updatedAt: emp.updatedAt || emp.createdAt || null,
     profileComplete: isClientProfileComplete(emp),
+    telegramId: session?.telegramId || null,
+    telegramUsername: session?.username || '',
+    telegramDisplayName,
+    telegramLinked: Boolean(session?.telegramId),
+    telegramLinkedAt: session?.verifiedAt || null,
+    telegramLastSeenAt: session?.lastSeenAt || session?.verifiedAt || null,
   };
 }
 

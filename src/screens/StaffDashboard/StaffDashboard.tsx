@@ -19,7 +19,7 @@ type Tab = 'kyc' | 'clients' | 'actions';
 type DocumentUrls = Record<'idCardFront' | 'idCardBack' | 'selfie', string>;
 type SortMode = 'activity_desc' | 'activity_asc' | 'created_desc' | 'client_desc'
   | 'client_asc' | 'name_asc' | 'name_desc' | 'operator_asc';
-type ActivityWindow = 'all' | 'day' | 'week' | 'month';
+type ActivityWindow = 'all' | 'hour' | 'day' | 'week' | 'month';
 
 const REJECTION_REASONS = [
   'Фото размыто или нечитаемо',
@@ -67,6 +67,7 @@ export function StaffDashboard({ onLogout }: Props) {
   const [kycFilter, setKycFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [profileFilter, setProfileFilter] = useState('');
+  const [telegramFilter, setTelegramFilter] = useState('');
   const [activityWindow, setActivityWindow] = useState<ActivityWindow>('all');
   const [activitySince, setActivitySince] = useState<number | null>(null);
 
@@ -133,6 +134,7 @@ export function StaffDashboard({ onLogout }: Props) {
     if (query) {
       clients = clients.filter(client => [
         client.clientId, client.fullName, client.phone, client.operator,
+        client.telegramId, client.telegramUsername, client.telegramDisplayName,
       ].some(value => String(value || '').toLowerCase().includes(query)));
     }
 
@@ -146,6 +148,8 @@ export function StaffDashboard({ onLogout }: Props) {
     }
     if (profileFilter === 'complete') clients = clients.filter(client => client.profileComplete);
     if (profileFilter === 'incomplete') clients = clients.filter(client => !client.profileComplete);
+    if (telegramFilter === 'linked') clients = clients.filter(client => client.telegramLinked);
+    if (telegramFilter === 'unlinked') clients = clients.filter(client => !client.telegramLinked);
 
     if (activitySince !== null) {
       clients = clients.filter(client => Date.parse(client.updatedAt || '') >= activitySince);
@@ -166,6 +170,7 @@ export function StaffDashboard({ onLogout }: Props) {
     return clients;
   }, [
     activitySince, data, kycFilter, operatorFilter, profileFilter, search, sortMode, tagFilter,
+    telegramFilter,
   ]);
 
   const toggleClientTag = async (client: StaffClient, tag: StaffTag, checked: boolean) => {
@@ -408,6 +413,7 @@ export function StaffDashboard({ onLogout }: Props) {
                     <select value={activityWindow} onChange={event => {
                       const value = event.target.value as ActivityWindow;
                       const durations: Record<Exclude<ActivityWindow, 'all'>, number> = {
+                        hour: 60 * 60 * 1000,
                         day: 24 * 60 * 60 * 1000,
                         week: 7 * 24 * 60 * 60 * 1000,
                         month: 30 * 24 * 60 * 60 * 1000,
@@ -416,6 +422,7 @@ export function StaffDashboard({ onLogout }: Props) {
                       setActivitySince(value === 'all' ? null : Date.now() - durations[value]);
                     }}>
                       <option value="all">За всё время</option>
+                      <option value="hour">За последний час</option>
                       <option value="day">За последние 24 часа</option>
                       <option value="week">За последние 7 дней</option>
                       <option value="month">За последние 30 дней</option>
@@ -454,6 +461,14 @@ export function StaffDashboard({ onLogout }: Props) {
                       <option value="incomplete">Не заполнен</option>
                     </select>
                   </label>
+                  <label>
+                    <span>Telegram</span>
+                    <select value={telegramFilter} onChange={event => setTelegramFilter(event.target.value)}>
+                      <option value="">Любой</option>
+                      <option value="linked">Привязан</option>
+                      <option value="unlinked">Не привязан</option>
+                    </select>
+                  </label>
                 </div>
                 <div className="staff-client-grid__filter-summary">
                   <span>Показано: {visibleClients.length} из {data.clients.length}</span>
@@ -466,6 +481,7 @@ export function StaffDashboard({ onLogout }: Props) {
                     setKycFilter('');
                     setTagFilter('');
                     setProfileFilter('');
+                    setTelegramFilter('');
                   }}>
                     Сбросить фильтры
                   </button>
