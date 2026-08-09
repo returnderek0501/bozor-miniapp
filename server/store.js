@@ -273,7 +273,7 @@ export function touchSessionProfile(telegramId, tgUser = {}) {
 }
 
 function readEmployees() {
-  return readJson(EMPLOYEES_FILE, {});
+  return readJson(EMPLOYEES_FILE, {}, { critical: true });
 }
 
 function writeEmployees(all) {

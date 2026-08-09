@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "node --test server/*.test.js",
     "preview": "vite preview",
+    "recover:volume": "node scripts/recover-volume.js",
     "start": "node server.js"
   },
   "engines": {
