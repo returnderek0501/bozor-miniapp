@@ -20,7 +20,6 @@ export interface KycOnboardingPayload {
 
 interface CaptureProps {
   rejected?: boolean;
-  phoneAlreadyVerified?: boolean;
   onComplete: (payload: KycOnboardingPayload) => Promise<void>;
 }
 
@@ -53,7 +52,7 @@ function GateShell({ children }: { children: React.ReactNode }) {
 }
 
 export function KycOnboardingGate({
-  rejected = false, phoneAlreadyVerified = false, onComplete,
+  rejected = false, onComplete,
 }: CaptureProps) {
   const { t } = useTranslation();
   const [images, setImages] = useState<KycImages>(EMPTY_IMAGES);
@@ -162,9 +161,7 @@ export function KycOnboardingGate({
             className="documents__submit"
             disabled={submitting || processingAny || !allReady}
           >
-            {submitting
-              ? t('kyc.submitting')
-              : t(phoneAlreadyVerified ? 'kyc.submit' : 'kyc.continueToPhone')}
+            {submitting ? t('kyc.submitting') : t('kyc.submit')}
           </button>
         </form>
       </main>

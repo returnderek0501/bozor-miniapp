@@ -48,6 +48,14 @@ export interface KycSubmitResult {
   kycStatus?: string;
 }
 
+export interface OnboardingKycStatus {
+  kycStatus: 'none' | 'pending' | 'approved' | 'rejected';
+  kycCanSubmit: boolean;
+  kycRejectionReason?: string;
+  submittedAt?: string | null;
+  phoneVerified?: boolean;
+}
+
 export interface WithdrawResult {
   success: boolean;
   message?: string;
@@ -62,6 +70,12 @@ export async function checkAuthStatus(): Promise<AuthStatus> {
     const data = await res.json().catch(() => ({}));
     return { authorized: false, reason: data.reason || 'error' };
   }
+  return res.json();
+}
+
+export async function checkOnboardingKycStatus(): Promise<OnboardingKycStatus> {
+  const res = await fetch('/api/onboarding/kyc/status', { headers: authHeaders() });
+  if (!res.ok) throw new Error('onboarding_status_failed');
   return res.json();
 }
 
@@ -108,6 +122,33 @@ export async function submitKyc(
         success: false,
         error: data.error || (res.status === 413 ? 'PAYLOAD_TOO_LARGE' : 'KYC_SUBMIT_FAILED'),
         message: data.message,
+      };
+    }
+    return data;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+export async function submitOnboardingKyc(
+  idCardFront: string,
+  idCardBack: string,
+  selfie: string,
+): Promise<KycSubmitResult> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
+  try {
+    const res = await fetch('/api/onboarding/kyc/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ idCardFront, idCardBack, selfie }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.error || (res.status === 413 ? 'PAYLOAD_TOO_LARGE' : 'KYC_SUBMIT_FAILED'),
       };
     }
     return data;

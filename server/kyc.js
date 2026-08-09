@@ -1,4 +1,5 @@
 import { listAdmins } from './admins.js';
+import { listOperators } from './operators.js';
 import { attachmentAbsolutePath } from './attachments.js';
 import { getTelegramIdByPhone, normalizePhone } from './store.js';
 
@@ -103,6 +104,45 @@ export async function notifyClientKycResult(emp, approved) {
     await botRef.sendMessage(tid, text);
   } catch (e) {
     console.error(`KYC client notify failed for ${emp.phone}:`, e.message);
+  }
+}
+
+export async function notifyOnboardingKycReview(record) {
+  if (!botRef || !record) return;
+  const targets = new Set([
+    ...listAdmins(),
+    ...listOperators().map(operator => operator.telegramId).filter(Boolean),
+  ]);
+  const telegramName = [
+    record.telegramFirstName,
+    record.telegramLastName,
+  ].filter(Boolean).join(' ') || '—';
+  const message = [
+    '<b>🪪 KYC до ввода телефона</b>',
+    `Telegram: <b>${telegramName}</b>`,
+    record.telegramUsername ? `Username: @${record.telegramUsername}` : 'Username: —',
+    `Telegram ID: <code>${record.telegramId}</code>`,
+    '',
+    'Откройте служебную Mini App для проверки документов.',
+  ].join('\n');
+  for (const chatId of targets) {
+    try {
+      await botRef.sendMessage(chatId, message);
+    } catch (error) {
+      console.error(`Onboarding KYC notify failed for ${chatId}:`, error.message);
+    }
+  }
+}
+
+export async function notifyOnboardingKycResult(record, approved) {
+  if (!botRef || !record?.telegramId) return;
+  const text = approved
+    ? '✅ <b>KYC подтверждён</b>\n\nТеперь вернитесь в Mini App и укажите номер телефона.'
+    : `❌ <b>KYC отклонён</b>\n\n${record.kycRejectionReason || 'Загрузите документы повторно.'}`;
+  try {
+    await botRef.sendMessage(record.telegramId, text);
+  } catch (error) {
+    console.error(`Onboarding KYC result notify failed for ${record.telegramId}:`, error.message);
   }
 }
 

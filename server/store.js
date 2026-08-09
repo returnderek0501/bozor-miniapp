@@ -528,6 +528,28 @@ export function submitKyc(rawPhone, documents) {
   return emp;
 }
 
+export function applyApprovedKyc(rawPhone, onboarding) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) throw new Error('INVALID_DATA');
+  if (onboarding?.kycStatus !== 'approved' || !onboarding?.kycDocuments) {
+    throw new Error('KYC_NOT_APPROVED');
+  }
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  const now = new Date().toISOString();
+  emp.kycDocuments = onboarding.kycDocuments;
+  emp.kycStatus = 'approved';
+  emp.kycSubmittedAt = onboarding.kycSubmittedAt || now;
+  emp.kycReviewedAt = onboarding.kycReviewedAt || now;
+  emp.kycReviewedBy = onboarding.kycReviewedBy ?? null;
+  emp.kycReviewedByName = onboarding.kycReviewedByName || '';
+  emp.kycRejectionReason = '';
+  emp.updatedAt = now;
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
+}
+
 export function setKycStatus(rawPhone, status, reviewer = null, reason = '') {
   const phone = normalizePhone(rawPhone);
   if (!phone) throw new Error('INVALID_DATA');

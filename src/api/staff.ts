@@ -74,6 +74,17 @@ export interface StaffDashboardData {
     approvedKyc: number;
   };
   clients: StaffClient[];
+  onboardingKyc: StaffOnboardingKyc[];
+}
+
+export interface StaffOnboardingKyc {
+  telegramId: number;
+  telegramUsername: string;
+  telegramDisplayName: string;
+  kycStatus: 'pending' | 'approved' | 'rejected';
+  kycSubmittedAt: string | null;
+  kycRejectionReason: string;
+  provisionalId: string;
 }
 
 export async function checkStaffStatus(): Promise<StaffProfile> {
@@ -114,6 +125,29 @@ export async function fetchKycDocument(
   );
   if (!response.ok) throw new Error('DOCUMENT_NOT_FOUND');
   return response.blob();
+}
+
+export async function fetchOnboardingKycDocument(
+  telegramId: number,
+  documentType: 'idCardFront' | 'idCardBack' | 'selfie',
+): Promise<Blob> {
+  const response = await fetch(
+    `/api/staff/onboarding-kyc/${telegramId}/documents/${documentType}`,
+    { headers: authHeaders() },
+  );
+  if (!response.ok) throw new Error('DOCUMENT_NOT_FOUND');
+  return response.blob();
+}
+
+export function reviewOnboardingKyc(
+  telegramId: number,
+  decision: 'approved' | 'rejected',
+  reason = '',
+): Promise<{ success: boolean; request: StaffOnboardingKyc }> {
+  return jsonRequest(`/api/staff/onboarding-kyc/${telegramId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  });
 }
 
 export function reviewKyc(

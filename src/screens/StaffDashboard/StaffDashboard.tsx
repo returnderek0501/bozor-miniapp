@@ -2,9 +2,10 @@ import {
   useCallback, useEffect, useMemo, useState,
 } from 'react';
 import {
-  assignClientTag, fetchKycDocument, fetchStaffDashboard, fetchStaffTags,
-  removeClientTag, reviewKyc, selectDeskOperator,
-  type StaffClient, type StaffDashboardData, type StaffTag,
+  assignClientTag, fetchKycDocument, fetchOnboardingKycDocument,
+  fetchStaffDashboard, fetchStaffTags, removeClientTag, reviewKyc,
+  reviewOnboardingKyc, selectDeskOperator,
+  type StaffClient, type StaffDashboardData, type StaffOnboardingKyc, type StaffTag,
 } from '../../api/staff';
 import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
 import { StaffClientGrid } from './StaffClientGrid';
@@ -54,6 +55,7 @@ export function StaffDashboard({ onLogout }: Props) {
   const [deskName, setDeskName] = useState('');
   const [savingDesk, setSavingDesk] = useState(false);
   const [documentClient, setDocumentClient] = useState<StaffClient | null>(null);
+  const [onboardingDocument, setOnboardingDocument] = useState<StaffOnboardingKyc | null>(null);
   const [documentUrls, setDocumentUrls] = useState<DocumentUrls | null>(null);
   const [loadingDocuments, setLoadingDocuments] = useState('');
   const [reviewing, setReviewing] = useState(false);
@@ -121,6 +123,7 @@ export function StaffDashboard({ onLogout }: Props) {
     () => data?.clients.filter(client => client.kycStatus === 'pending') || [],
     [data],
   );
+  const pendingOnboarding = data?.onboardingKyc || [];
 
   const operatorOptions = useMemo(
     () => [...new Set((data?.clients || []).map(client => client.operator).filter(Boolean))]
@@ -203,6 +206,7 @@ export function StaffDashboard({ onLogout }: Props) {
     if (documentUrls) Object.values(documentUrls).forEach(URL.revokeObjectURL);
     setDocumentUrls(null);
     setDocumentClient(null);
+    setOnboardingDocument(null);
     setReason(REJECTION_REASONS[0]);
   };
 
@@ -224,6 +228,7 @@ export function StaffDashboard({ onLogout }: Props) {
         selfie: URL.createObjectURL(selfie),
       });
       setDocumentClient(client);
+      setOnboardingDocument(null);
     } catch {
       setError('Не удалось открыть документы клиента.');
     } finally {
@@ -231,11 +236,45 @@ export function StaffDashboard({ onLogout }: Props) {
     }
   };
 
+  const openOnboardingDocuments = async (request: StaffOnboardingKyc) => {
+    if (documentUrls) Object.values(documentUrls).forEach(URL.revokeObjectURL);
+    setDocumentUrls(null);
+    setDocumentClient(null);
+    setOnboardingDocument(null);
+    setLoadingDocuments(`tg_${request.telegramId}`);
+    setError('');
+    try {
+      const [front, back, selfie] = await Promise.all([
+        fetchOnboardingKycDocument(request.telegramId, 'idCardFront'),
+        fetchOnboardingKycDocument(request.telegramId, 'idCardBack'),
+        fetchOnboardingKycDocument(request.telegramId, 'selfie'),
+      ]);
+      setDocumentUrls({
+        idCardFront: URL.createObjectURL(front),
+        idCardBack: URL.createObjectURL(back),
+        selfie: URL.createObjectURL(selfie),
+      });
+      setOnboardingDocument(request);
+    } catch {
+      setError('Не удалось открыть документы KYC до телефона.');
+    } finally {
+      setLoadingDocuments('');
+    }
+  };
+
   const submitReview = async (decision: 'approved' | 'rejected') => {
-    if (!documentClient) return;
+    if (!documentClient && !onboardingDocument) return;
     setReviewing(true);
     try {
-      await reviewKyc(documentClient.clientId, decision, decision === 'rejected' ? reason : '');
+      if (onboardingDocument) {
+        await reviewOnboardingKyc(
+          onboardingDocument.telegramId,
+          decision,
+          decision === 'rejected' ? reason : '',
+        );
+      } else if (documentClient) {
+        await reviewKyc(documentClient.clientId, decision, decision === 'rejected' ? reason : '');
+      }
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
       closeDocuments();
       await refresh();
@@ -333,7 +372,7 @@ export function StaffDashboard({ onLogout }: Props) {
           className={tab === 'kyc' ? 'is-active' : ''}
           onClick={() => setTab('kyc')}
         >
-          KYC <span>{pendingClients.length}</span>
+          KYC <span>{pendingClients.length + pendingOnboarding.length}</span>
         </button>
         <button
           type="button"
@@ -356,7 +395,33 @@ export function StaffDashboard({ onLogout }: Props) {
 
       {tab === 'kyc' ? (
         <section className="staff-dashboard__list">
-          {!pendingClients.length && <div className="staff-dashboard__empty">Нет заявок на проверке</div>}
+          {!pendingClients.length && !pendingOnboarding.length && (
+            <div className="staff-dashboard__empty">Нет заявок на проверке</div>
+          )}
+          {pendingOnboarding.map(request => (
+            <article className="staff-client-card staff-client-card--kyc" key={`tg_${request.telegramId}`}>
+              <div className="staff-client-card__top">
+                <div>
+                  <span>KYC до телефона · TG {request.telegramId}</span>
+                  <h2>{request.telegramDisplayName || request.telegramUsername || 'Пользователь Telegram'}</h2>
+                </div>
+                <span className="staff-status staff-status--pending">На проверке</span>
+              </div>
+              <dl>
+                <div><dt>Username</dt><dd>{request.telegramUsername ? `@${request.telegramUsername}` : '—'}</dd></div>
+                <div><dt>Телефон</dt><dd>ещё не запрошен</dd></div>
+                <div><dt>Подано</dt><dd>{formatDate(request.kycSubmittedAt)}</dd></div>
+              </dl>
+              <button
+                type="button"
+                className="staff-client-card__primary"
+                onClick={() => { void openOnboardingDocuments(request); }}
+                disabled={loadingDocuments === `tg_${request.telegramId}`}
+              >
+                {loadingDocuments === `tg_${request.telegramId}` ? 'Загружаем…' : 'Открыть документы'}
+              </button>
+            </article>
+          ))}
           {pendingClients.map(client => (
             <article className="staff-client-card staff-client-card--kyc" key={client.clientId}>
               <div className="staff-client-card__top">
@@ -533,13 +598,21 @@ export function StaffDashboard({ onLogout }: Props) {
         />
       )}
 
-      {documentClient && documentUrls && (
+      {(documentClient || onboardingDocument) && documentUrls && (
         <div className="staff-kyc-modal" role="dialog" aria-modal="true">
           <div className="staff-kyc-modal__sheet">
             <div className="staff-kyc-modal__header">
               <div>
-                <span>Проверка KYC · #{documentClient.clientId}</span>
-                <h2>{documentClient.fullName || documentClient.phone}</h2>
+                <span>
+                  {onboardingDocument
+                    ? `KYC до телефона · TG ${onboardingDocument.telegramId}`
+                    : `Проверка KYC · #${documentClient?.clientId}`}
+                </span>
+                <h2>
+                  {onboardingDocument
+                    ? onboardingDocument.telegramDisplayName || onboardingDocument.telegramUsername || 'Пользователь Telegram'
+                    : documentClient?.fullName || documentClient?.phone}
+                </h2>
               </div>
               <button type="button" onClick={closeDocuments} aria-label="Закрыть">×</button>
             </div>
@@ -548,7 +621,7 @@ export function StaffDashboard({ onLogout }: Props) {
               <figure><img src={documentUrls.idCardBack} alt="Обратная сторона ID-карты" /><figcaption>ID-карта · обратная</figcaption></figure>
               <figure><img src={documentUrls.selfie} alt="Селфи с ID-картой" /><figcaption>Селфи с документом</figcaption></figure>
             </div>
-            {documentClient.kycStatus === 'pending' ? (
+            {onboardingDocument || documentClient?.kycStatus === 'pending' ? (
               <>
                 <label className="staff-kyc-modal__reason">
                   Причина отказа
@@ -577,7 +650,7 @@ export function StaffDashboard({ onLogout }: Props) {
               </>
             ) : (
               <p className="staff-kyc-modal__reviewed">
-                Решение уже принято: {statusLabel(documentClient.kycStatus)}
+                Решение уже принято: {statusLabel(documentClient?.kycStatus || 'none')}
               </p>
             )}
           </div>

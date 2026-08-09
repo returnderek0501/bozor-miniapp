@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   isPhoneAllowed, getSession, setSession, touchSessionProfile, normalizePhone,
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
-  submitKyc, listEmployees, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
+  submitKyc, applyApprovedKyc, listEmployees, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
   addPhone, setEmployeeOperator, updateEmployeeFields,
   addClientTag, addClientTagByDefinition, addClientTagFreeform, removeClientTag, getClientTag,
   listPhones, normalizePhoneForOperator,
@@ -12,7 +12,10 @@ import {
   saveTagBuffer,
 } from './attachments.js';
 import { validateInitData } from './telegram.js';
-import { notifyOperatorKycReview, notifyClientKycResult } from './kyc.js';
+import {
+  notifyOperatorKycReview, notifyClientKycResult,
+  notifyOnboardingKycReview, notifyOnboardingKycResult,
+} from './kyc.js';
 import {
   hasStaffAccess, getActor, canManageClient, canExport,
 } from './permissions.js';
@@ -44,6 +47,10 @@ import {
 } from './staffMessaging.js';
 import { getBotStatus } from './botStatus.js';
 import { buildClientAuthStatus } from './clientAuth.js';
+import {
+  getOnboardingKyc, onboardingKycStatus, submitOnboardingKyc,
+  listPendingOnboardingKyc, reviewOnboardingKyc, linkOnboardingKyc,
+} from './onboardingKyc.js';
 
 export function createApiRouter(botToken) {
   const router = Router();
@@ -104,6 +111,21 @@ export function createApiRouter(botToken) {
       deskName: staff.deskName,
       needsDeskName: !staff.isAdmin && !staff.deskName,
       recentDeskNames: staff.isAdmin ? [] : listRecentDeskNames(staff.tgUser.id),
+    };
+  }
+
+  function onboardingKycSummary(record) {
+    return {
+      telegramId: record.telegramId,
+      telegramUsername: record.telegramUsername || '',
+      telegramDisplayName: [
+        record.telegramFirstName,
+        record.telegramLastName,
+      ].filter(Boolean).join(' '),
+      kycStatus: record.kycStatus,
+      kycSubmittedAt: record.kycSubmittedAt || null,
+      kycRejectionReason: record.kycRejectionReason || '',
+      provisionalId: record.provisionalId,
     };
   }
 
@@ -187,15 +209,18 @@ export function createApiRouter(botToken) {
     const clients = employees
       .map(staffClientSummary)
       .sort((a, b) => Number(b.clientId || 0) - Number(a.clientId || 0));
+    const onboardingKyc = listPendingOnboardingKyc().map(onboardingKycSummary);
     return res.json({
       profile: staffStatus(staff),
       stats: {
         clients: clients.length,
-        pendingKyc: clients.filter(client => client.kycStatus === 'pending').length,
+        pendingKyc: clients.filter(client => client.kycStatus === 'pending').length
+          + onboardingKyc.length,
         incomplete: clients.filter(client => !client.profileComplete).length,
         approvedKyc: clients.filter(client => client.kycStatus === 'approved').length,
       },
       clients,
+      onboardingKyc,
     });
   });
 
@@ -588,6 +613,50 @@ export function createApiRouter(botToken) {
     }
   });
 
+  router.get('/staff/onboarding-kyc/:telegramId/documents/:documentType', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const documentTypes = new Set(['idCardFront', 'idCardBack', 'selfie']);
+    if (!documentTypes.has(req.params.documentType)) {
+      return res.status(400).json({ error: 'INVALID_DOCUMENT_TYPE' });
+    }
+    const record = getOnboardingKyc(req.params.telegramId);
+    const document = record?.kycDocuments?.[req.params.documentType];
+    if (!document?.path) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    return res.sendFile(attachmentAbsolutePath(document.path), error => {
+      if (error && !res.headersSent) {
+        res.status(error.statusCode || 404).json({ error: 'DOCUMENT_NOT_FOUND' });
+      }
+    });
+  });
+
+  router.post('/staff/onboarding-kyc/:telegramId/review', async (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const decision = req.body?.decision;
+    if (decision !== 'approved' && decision !== 'rejected') {
+      return res.status(400).json({ success: false, error: 'INVALID_DECISION' });
+    }
+    const reason = decision === 'rejected' ? String(req.body?.reason || '').trim() : '';
+    if (decision === 'rejected' && (reason.length < 3 || reason.length > 300)) {
+      return res.status(400).json({ success: false, error: 'INVALID_REJECTION_REASON' });
+    }
+    try {
+      const record = reviewOnboardingKyc(req.params.telegramId, decision, staff.actor, reason);
+      const session = getSession(record.telegramId);
+      if (decision === 'approved' && session?.phone && isPhoneAllowed(session.phone)) {
+        applyApprovedKyc(session.phone, record);
+        linkOnboardingKyc(record.telegramId, session.phone);
+      }
+      await notifyOnboardingKycResult(record, decision === 'approved');
+      return res.json({ success: true, request: onboardingKycSummary(record) });
+    } catch (error) {
+      const code = error.message === 'KYC_NOT_PENDING' ? 'KYC_NOT_PENDING' : 'KYC_REVIEW_FAILED';
+      return res.status(code === 'KYC_NOT_PENDING' ? 409 : 400)
+        .json({ success: false, error: code });
+    }
+  });
+
   router.get('/staff/kyc/:clientId/documents/:documentType', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
@@ -636,6 +705,81 @@ export function createApiRouter(botToken) {
     }
   });
 
+  router.get('/onboarding/kyc/status', (req, res) => {
+    const tgUser = resolveTelegramUser(req);
+    if (!tgUser) {
+      return res.status(401).json({ success: false, error: 'INVALID_INIT_DATA' });
+    }
+    const session = getSession(tgUser.id);
+    const linkedEmployee = session?.phone && isPhoneAllowed(session.phone)
+      ? getEmployee(session.phone)
+      : null;
+    const onboarding = getOnboardingKyc(tgUser.id);
+    if (!onboarding && linkedEmployee?.kycStatus && linkedEmployee.kycStatus !== 'none') {
+      return res.json({
+        kycStatus: linkedEmployee.kycStatus,
+        kycCanSubmit: linkedEmployee.kycStatus === 'rejected',
+        kycRejectionReason: linkedEmployee.kycRejectionReason || '',
+        submittedAt: linkedEmployee.kycSubmittedAt || null,
+        phoneVerified: true,
+      });
+    }
+    return res.json({
+      ...onboardingKycStatus(tgUser.id),
+      phoneVerified: Boolean(linkedEmployee),
+    });
+  });
+
+  router.post('/onboarding/kyc/submit', async (req, res) => {
+    const tgUser = resolveTelegramUser(req);
+    if (!tgUser) {
+      return res.status(401).json({ success: false, error: 'INVALID_INIT_DATA' });
+    }
+    const current = getOnboardingKyc(tgUser.id);
+    if (current?.kycStatus === 'pending') {
+      return res.status(409).json({ success: false, error: 'KYC_PENDING' });
+    }
+    if (current?.kycStatus === 'approved') {
+      return res.status(409).json({ success: false, error: 'KYC_ALREADY_APPROVED' });
+    }
+    const { idCardFront, idCardBack, selfie } = req.body || {};
+    if (!idCardFront || !idCardBack || !selfie) {
+      return res.status(400).json({ success: false, error: 'KYC_DOCUMENTS_REQUIRED' });
+    }
+
+    let savedDocuments = null;
+    let submitted = false;
+    try {
+      const prefix = `tg_${Number(tgUser.id)}`;
+      const frontParsed = parseBase64Image(idCardFront);
+      const backParsed = parseBase64Image(idCardBack);
+      const selfieParsed = parseBase64Image(selfie);
+      savedDocuments = {
+        idCardFront: saveKycBuffer(prefix, 'id_card_front', frontParsed.buffer, frontParsed.ext),
+        idCardBack: saveKycBuffer(prefix, 'id_card_back', backParsed.buffer, backParsed.ext),
+        selfie: saveKycBuffer(prefix, 'selfie', selfieParsed.buffer, selfieParsed.ext),
+      };
+      const record = submitOnboardingKyc(tgUser, savedDocuments);
+      submitted = true;
+      deleteKycDocuments(current?.kycDocuments);
+      await notifyOnboardingKycReview(record);
+      return res.json({ success: true, kycStatus: record.kycStatus });
+    } catch (error) {
+      if (!submitted && savedDocuments) deleteKycDocuments(savedDocuments);
+      const knownErrors = new Set([
+        'KYC_PENDING',
+        'KYC_ALREADY_APPROVED',
+        'KYC_DOCUMENTS_REQUIRED',
+        'INVALID_IMAGE',
+        'IMAGE_TOO_SMALL',
+        'IMAGE_TOO_LARGE',
+      ]);
+      const code = knownErrors.has(error.message) ? error.message : 'KYC_SUBMIT_FAILED';
+      return res.status(code === 'KYC_PENDING' || code === 'KYC_ALREADY_APPROVED' ? 409 : 400)
+        .json({ success: false, error: code });
+    }
+  });
+
   router.get('/auth/status', (req, res) => {
     const ctx = resolveSession(req);
     if (!ctx) {
@@ -672,9 +816,30 @@ export function createApiRouter(botToken) {
       });
     }
 
+    let emp = getEmployee(normalized);
+    const existingSession = getSession(tgUser.id);
+    const trustedExistingKyc = emp.kycStatus === 'approved'
+      && existingSession?.phone === normalized;
+    if (!trustedExistingKyc) {
+      const onboarding = getOnboardingKyc(tgUser.id);
+      if (!onboarding || onboarding.kycStatus !== 'approved') {
+        const status = onboarding?.kycStatus || 'none';
+        return res.status(403).json({
+          authorized: false,
+          reason: status === 'pending'
+            ? 'kyc_pending'
+            : status === 'rejected' ? 'kyc_rejected' : 'kyc_required',
+          kycStatus: status,
+        });
+      }
+      if (onboarding.linkedPhone && onboarding.linkedPhone !== normalized) {
+        return res.status(403).json({ authorized: false, reason: 'kyc_phone_mismatch' });
+      }
+      emp = applyApprovedKyc(normalized, onboarding);
+      linkOnboardingKyc(tgUser.id, normalized);
+    }
     setSession(tgUser.id, normalized, tgUser);
-    const emp = getEmployee(normalized);
-    res.json(buildClientAuthStatus(tgUser, normalized, emp));
+    return res.json(buildClientAuthStatus(tgUser, normalized, emp));
   });
 
   router.get('/cabinet', (req, res) => {
