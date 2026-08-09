@@ -33,6 +33,25 @@
   text-align: left;
 }
 
+.auth-gate__card--kyc {
+  max-width: 520px;
+  padding: 8px;
+}
+
+.documents--onboarding {
+  padding: 16px;
+}
+
+.documents--pending-gate {
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.documents__pending-icon {
+  margin-bottom: 12px;
+  font-size: 38px;
+}
+
 .auth-gate__card h2 {
   font-size: 18px;
   font-weight: 600;

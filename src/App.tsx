@@ -1,8 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { checkAuthStatus, verifyPhone } from './api/client';
+import {
+  checkAuthStatus, submitKyc, verifyPhone, type AuthStatus,
+} from './api/client';
 import { AuthGate } from './screens/AuthGate/AuthGate';
+import {
+  KycOnboardingGate, KycPendingGate, type KycOnboardingPayload,
+} from './screens/AuthGate/KycOnboardingGate';
 import { AccessDenied } from './screens/AccessDenied/AccessDenied';
 import { CabinetScreen } from './screens/CabinetScreen/CabinetScreen';
 import { DocumentsScreen } from './screens/DocumentsScreen/DocumentsScreen';
@@ -13,12 +18,36 @@ import { checkStaffStatus, lockStaff } from './api/staff';
 import { StaffGate } from './screens/StaffGate/StaffGate';
 import { StaffDashboard } from './screens/StaffDashboard/StaffDashboard';
 
-type AppState = 'loading' | 'staff-auth' | 'staff-ready' | 'auth' | 'denied' | 'ready';
+type AppState = 'loading' | 'staff-auth' | 'staff-ready' | 'kyc'
+  | 'kyc-pending' | 'auth' | 'denied' | 'ready';
 
 export default function App() {
   const { t } = useTranslation();
   const [state, setState] = useState<AppState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [kycRejected, setKycRejected] = useState(false);
+  const [stagedKyc, setStagedKyc] = useState<KycOnboardingPayload | null>(null);
+  const [checkingKyc, setCheckingKyc] = useState(false);
+
+  const applyClientStatus = useCallback((status: AuthStatus) => {
+    if (!status.authorized) {
+      setPhoneVerified(false);
+      setKycRejected(false);
+      setState('kyc');
+      return;
+    }
+    setPhoneVerified(true);
+    if (status.appAllowed || status.kycStatus === 'approved') {
+      setKycRejected(false);
+      setState('ready');
+    } else if (status.kycStatus === 'pending') {
+      setState('kyc-pending');
+    } else {
+      setKycRejected(status.kycStatus === 'rejected');
+      setState('kyc');
+    }
+  }, []);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -35,19 +64,47 @@ export default function App() {
           return;
         }
         const clientStatus = await checkAuthStatus();
-        if (active) setState(clientStatus.authorized ? 'ready' : 'auth');
+        if (!active) return;
+        if (clientStatus.reason === 'invalid_init_data') {
+          setErrorMessage(t('error.contactFailed'));
+          setState('denied');
+        } else {
+          applyClientStatus(clientStatus);
+        }
       })
       .catch(() => {
-        if (active) setState('auth');
+        if (active) setState('kyc');
       });
     return () => { active = false; };
+  }, [applyClientStatus, t]);
+
+  const submitCapturedKyc = useCallback(async (payload: KycOnboardingPayload) => {
+    const result = await submitKyc(payload.idCardFront, payload.idCardBack, payload.selfie);
+    if (!result.success) throw new Error(result.error || 'KYC_SUBMIT_FAILED');
+    setStagedKyc(null);
+    setKycRejected(false);
+    setState('kyc-pending');
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
   }, []);
+
+  const handleKycComplete = useCallback(async (payload: KycOnboardingPayload) => {
+    if (!phoneVerified) {
+      setStagedKyc(payload);
+      setState('auth');
+      return;
+    }
+    await submitCapturedKyc(payload);
+  }, [phoneVerified, submitCapturedKyc]);
 
   const handleVerify = useCallback(async (phone: string) => {
     const result = await verifyPhone(phone);
     if (result.authorized) {
-      setState('ready');
-      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+      setPhoneVerified(true);
+      if (stagedKyc) {
+        await submitCapturedKyc(stagedKyc);
+      } else {
+        applyClientStatus(result);
+      }
     } else if (result.reason === 'invalid_init_data') {
       setErrorMessage(t('error.contactFailed'));
       setState('denied');
@@ -57,7 +114,16 @@ export default function App() {
       setState('denied');
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
     }
-  }, [t]);
+  }, [applyClientStatus, stagedKyc, submitCapturedKyc, t]);
+
+  const refreshKycStatus = useCallback(async () => {
+    setCheckingKyc(true);
+    try {
+      applyClientStatus(await checkAuthStatus());
+    } finally {
+      setCheckingKyc(false);
+    }
+  }, [applyClientStatus]);
 
   const handleStaffLogout = useCallback(() => {
     void lockStaff().finally(() => setState('staff-auth'));
@@ -76,7 +142,21 @@ export default function App() {
   }
 
   if (state === 'auth') {
-    return <AuthGate onVerify={handleVerify} />;
+    return <AuthGate onVerify={handleVerify} skipWelcome />;
+  }
+
+  if (state === 'kyc') {
+    return (
+      <KycOnboardingGate
+        rejected={kycRejected}
+        phoneAlreadyVerified={phoneVerified}
+        onComplete={handleKycComplete}
+      />
+    );
+  }
+
+  if (state === 'kyc-pending') {
+    return <KycPendingGate checking={checkingKyc} onRefresh={refreshKycStatus} />;
   }
 
   if (state === 'staff-auth') {
@@ -93,7 +173,7 @@ export default function App() {
         message={errorMessage}
         onRetry={() => {
           setErrorMessage('');
-          setState('auth');
+          setState(stagedKyc ? 'auth' : 'kyc');
         }}
       />
     );

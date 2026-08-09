@@ -14,6 +14,9 @@ export interface AuthUser {
 
 export interface AuthStatus {
   authorized: boolean;
+  appAllowed?: boolean;
+  kycStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  kycCanSubmit?: boolean;
   reason?: string;
   message?: string;
   phone?: string;

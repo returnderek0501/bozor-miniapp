@@ -43,6 +43,7 @@ import {
   sendClientMessage, executeBroadcast, notifyBroadcastApprovers,
 } from './staffMessaging.js';
 import { getBotStatus } from './botStatus.js';
+import { buildClientAuthStatus } from './clientAuth.js';
 
 export function createApiRouter(botToken) {
   const router = Router();
@@ -646,14 +647,7 @@ export function createApiRouter(botToken) {
     }
 
     const emp = getEmployee(ctx.phone);
-    res.json({
-      authorized: true,
-      phone: maskPhone(ctx.phone),
-      user: {
-        id: ctx.tgUser.id,
-        name: emp.fullName || `${ctx.tgUser.first_name || ''} ${ctx.tgUser.last_name || ''}`.trim(),
-      },
-    });
+    res.json(buildClientAuthStatus(ctx.tgUser, ctx.phone, emp));
   });
 
   router.post('/auth/verify', (req, res) => {
@@ -680,14 +674,7 @@ export function createApiRouter(botToken) {
 
     setSession(tgUser.id, normalized, tgUser);
     const emp = getEmployee(normalized);
-    res.json({
-      authorized: true,
-      phone: maskPhone(normalized),
-      user: {
-        id: tgUser.id,
-        name: emp.fullName || `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim(),
-      },
-    });
+    res.json(buildClientAuthStatus(tgUser, normalized, emp));
   });
 
   router.get('/cabinet', (req, res) => {
@@ -697,6 +684,9 @@ export function createApiRouter(botToken) {
     }
 
     const emp = getEmployee(ctx.phone);
+    if (emp.kycStatus !== 'approved') {
+      return res.status(403).json({ error: 'KYC_NOT_APPROVED', kycStatus: emp.kycStatus || 'none' });
+    }
     res.json(publicEmployee(emp, maskPhone(ctx.phone)));
   });
 

@@ -6,6 +6,7 @@ import './AuthGate.css';
 
 interface Props {
   onVerify: (phone: string) => Promise<void>;
+  skipWelcome?: boolean;
 }
 
 function formatPhoneInput(value: string) {
@@ -16,9 +17,9 @@ function formatPhoneInput(value: string) {
   return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 7)} ${digits.slice(7)}`;
 }
 
-export function AuthGate({ onVerify }: Props) {
+export function AuthGate({ onVerify, skipWelcome = false }: Props) {
   const { t } = useTranslation();
-  const [step, setStep] = useState<'welcome' | 'phone'>('welcome');
+  const [step, setStep] = useState<'welcome' | 'phone'>(skipWelcome ? 'phone' : 'welcome');
   const [phone, setPhone] = useState('');
   const [focused, setFocused] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -40,6 +41,10 @@ export function AuthGate({ onVerify }: Props) {
     setVerifying(true);
     try {
       await onVerify(`+998${digits}`);
+    } catch (verifyError) {
+      const code = verifyError instanceof Error ? verifyError.message : '';
+      const key = code ? `kyc.errors.${code}` : '';
+      setError(key && t(key) !== key ? t(key) : t('kyc.submitFailed'));
     } finally {
       setVerifying(false);
     }
@@ -101,14 +106,16 @@ export function AuthGate({ onVerify }: Props) {
                 <button type="submit" className="auth-gate__btn" disabled={verifying}>
                   {verifying ? t('auth.checking') : t('auth.submit')}
                 </button>
-                <button
-                  type="button"
-                  className="auth-gate__back"
-                  onClick={() => { setStep('welcome'); setError(''); setPhone(''); }}
-                  disabled={verifying}
-                >
-                  {t('auth.back')}
-                </button>
+                {!skipWelcome && (
+                  <button
+                    type="button"
+                    className="auth-gate__back"
+                    onClick={() => { setStep('welcome'); setError(''); setPhone(''); }}
+                    disabled={verifying}
+                  >
+                    {t('auth.back')}
+                  </button>
+                )}
               </form>
             </>
           )}

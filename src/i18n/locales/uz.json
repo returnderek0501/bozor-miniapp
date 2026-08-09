@@ -71,6 +71,12 @@
   },
   "kyc": {
     "lead": "Avansni chiqarish uchun shaxsni tasdiqlang (KYC). ID-kartaning ikki tomoni va qo'lingizda ID-karta bilan selfi yuklang.",
+    "onboardingTitle": "Kirishdan oldin shaxsni tasdiqlash",
+    "onboardingLead": "Avval ID-kartaning ikki tomonini va hujjat bilan selfini yuklang. Telefon raqami barcha rasmlar tayyor bo'lgandan keyin so'raladi.",
+    "continueToPhone": "Telefon raqamiga o'tish",
+    "pendingTitle": "KYC tekshirilmoqda",
+    "pendingGateHint": "Hujjatlar operator tomonidan tasdiqlangach, shaxsiy kabinet ochiladi.",
+    "checkStatus": "Holatni tekshirish",
     "statusLabel": "KYC holati",
     "statusNone": "O'tkazilmagan",
     "statusPending": "Tekshiruvda",
