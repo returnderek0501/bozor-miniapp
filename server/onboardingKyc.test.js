@@ -144,6 +144,63 @@ test('onboarding KYC review is idempotent and clears stale phone links on resubm
   }
 });
 
+test('reconcile does not resurrect rejected onboarding KYC from attachments', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-reject-keep-'));
+  const previous = process.env.DATA_DIR;
+  process.env.DATA_DIR = dataDir;
+  const folder = join(dataDir, 'attachments', 'tg_777001');
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'kyc_id_card_front_100.jpg'), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  writeFileSync(join(folder, 'kyc_id_card_back_101.jpg'), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  writeFileSync(join(folder, 'kyc_selfie_102.jpg'), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+  try {
+    const onboarding = await import('./onboardingKyc.js');
+    const tgUser = {
+      id: 777001,
+      username: 'rejected_lead',
+      first_name: 'Rejected',
+      last_name: 'Lead',
+    };
+    onboarding.submitOnboardingKyc(tgUser, {
+      idCardFront: { path: 'attachments/tg_777001/kyc_id_card_front_100.jpg' },
+      idCardBack: { path: 'attachments/tg_777001/kyc_id_card_back_101.jpg' },
+      selfie: { path: 'attachments/tg_777001/kyc_selfie_102.jpg' },
+    });
+    onboarding.reviewOnboardingKyc(
+      tgUser.id,
+      'rejected',
+      { id: 1, name: 'Admin' },
+      'Фото размыто или нечитаемо',
+    );
+    assert.equal(onboarding.getOnboardingKyc(tgUser.id).kycStatus, 'rejected');
+    assert.equal(
+      onboarding.listPendingOnboardingKyc({ reconcile: false })
+        .filter(record => record.telegramId === tgUser.id).length,
+      0,
+    );
+
+    const result = onboarding.reconcileOnboardingFromAttachments();
+    assert.equal(onboarding.getOnboardingKyc(tgUser.id).kycStatus, 'rejected');
+    assert.equal(
+      onboarding.listPendingOnboardingKyc({ reconcile: true })
+        .filter(record => record.telegramId === tgUser.id).length,
+      0,
+    );
+    // Existing rejected row must never be counted as a recovery.
+    assert.equal(
+      result.recovered === 0
+        || !onboarding.listPendingOnboardingKyc({ reconcile: false })
+          .some(record => record.telegramId === tgUser.id),
+      true,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('onboarding KYC recovers pending records from attachment folders', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-recover-'));
   const previous = process.env.DATA_DIR;

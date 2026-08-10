@@ -97,7 +97,8 @@ export function reconcileOnboardingFromAttachments() {
       if (!Number.isInteger(telegramId) || telegramId <= 0) continue;
       const recordKey = key(telegramId);
       const existing = data.records[recordKey];
-      if (existing?.kycStatus === 'pending' || existing?.kycStatus === 'approved') continue;
+      // Never resurrect decided/pending rows — only rebuild truly missing records.
+      if (existing) continue;
 
       let files = [];
       try {
@@ -122,20 +123,19 @@ export function reconcileOnboardingFromAttachments() {
       ].sort().at(-1);
 
       data.records[recordKey] = {
-        ...(existing || {}),
         telegramId,
-        telegramUsername: existing?.telegramUsername || '',
-        telegramFirstName: existing?.telegramFirstName || '',
-        telegramLastName: existing?.telegramLastName || '',
+        telegramUsername: '',
+        telegramFirstName: '',
+        telegramLastName: '',
         provisionalId: `tg_${telegramId}`,
         kycStatus: 'pending',
         kycDocuments: documents,
-        kycSubmittedAt: existing?.kycSubmittedAt || submittedAt,
+        kycSubmittedAt: submittedAt,
         kycReviewedAt: null,
         kycReviewedBy: null,
         kycReviewedByName: '',
         kycRejectionReason: '',
-        linkedPhone: existing?.linkedPhone || '',
+        linkedPhone: '',
         recoveredFromAttachments: true,
         updatedAt: new Date().toISOString(),
       };
