@@ -1,6 +1,9 @@
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { getDataDir, readJson, updateJsonSync } from './dataPath.js';
+import {
+  addPhone, applyApprovedKyc, setSession, updateEmployeeFields,
+} from './store.js';
 
 const EMPTY = { records: {}, updatedAt: null };
 
@@ -200,6 +203,14 @@ export function listPendingOnboardingKyc({ reconcile = true } = {}) {
     .sort((a, b) => String(a.kycSubmittedAt).localeCompare(String(b.kycSubmittedAt)));
 }
 
+/** Approved KYC waiting for a phone — shown in the clients panel. */
+export function listApprovedUnlinkedOnboardingKyc() {
+  return Object.values(loadData().records)
+    .filter(record => record.kycStatus === 'approved' && !record.linkedPhone)
+    .sort((a, b) => String(b.kycReviewedAt || b.kycSubmittedAt || '')
+      .localeCompare(String(a.kycReviewedAt || a.kycSubmittedAt || '')));
+}
+
 export function onboardingKycStats() {
   const records = Object.values(loadData().records);
   return {
@@ -243,4 +254,32 @@ export function linkOnboardingKyc(telegramId, phone) {
     data.records[key(telegramId)] = record;
   });
   return record;
+}
+
+/**
+ * Create/whitelist a phone for an approved onboarding KYC and bind Telegram.
+ */
+export function assignOnboardingPhone(telegramId, rawPhone, actor = null) {
+  const record = getOnboardingKyc(telegramId);
+  if (!record) throw new Error('KYC_NOT_FOUND');
+  if (record.kycStatus !== 'approved') throw new Error('KYC_NOT_APPROVED');
+  if (record.linkedPhone) throw new Error('KYC_ALREADY_LINKED');
+
+  const phone = addPhone(rawPhone, actor);
+  let employee = applyApprovedKyc(phone, record);
+  const displayName = [
+    record.telegramFirstName,
+    record.telegramLastName,
+  ].filter(Boolean).join(' ').trim();
+  if (displayName && !String(employee.fullName || '').trim()) {
+    employee = updateEmployeeFields(phone, { name: displayName });
+  }
+  linkOnboardingKyc(telegramId, phone);
+  setSession(telegramId, phone, {
+    id: Number(telegramId),
+    username: record.telegramUsername || '',
+    first_name: record.telegramFirstName || '',
+    last_name: record.telegramLastName || '',
+  });
+  return { phone, employee, record: getOnboardingKyc(telegramId) };
 }

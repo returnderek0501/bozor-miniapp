@@ -1,14 +1,24 @@
 import { join } from 'path';
 import {
-  DATA_DIR, readJson, writeJson, ensureDataDir, getDataDir,
+  readJson, writeJson, ensureDataDir, getDataDir,
 } from './dataPath.js';
 import { getTag, slugify } from './tags.js';
 import { isAdmin } from './admins.js';
 import { assignClientIdIfMissing, normalizeClientId } from './clientIds.js';
 
-const PHONES_FILE = join(DATA_DIR, 'phones.json');
-const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
-const EMPLOYEES_FILE = join(DATA_DIR, 'employees.json');
+const FIXED_POSITION = 'Agent';
+
+function phonesFile() {
+  return join(getDataDir(), 'phones.json');
+}
+
+function sessionsFile() {
+  return join(getDataDir(), 'sessions.json');
+}
+
+function employeesFile() {
+  return join(getDataDir(), 'employees.json');
+}
 
 function triggerSync() {
   import('./export.js').then(m => m.scheduleDataSync()).catch(() => {});
@@ -64,8 +74,6 @@ function assignActorToClient(emp, actor) {
   emp.operator = opName;
   emp.operatorId = actor.operatorId || '';
 }
-
-const FIXED_POSITION = 'Agent';
 
 function defaultEmployee(phone) {
   return {
@@ -137,7 +145,7 @@ function migrateEmployee(emp) {
 }
 
 export function listPhones() {
-  const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
+  const data = readJson(phonesFile(), { phones: [], updatedAt: null });
   return data.phones || [];
 }
 
@@ -145,13 +153,13 @@ export function addPhone(raw, actor = null) {
   const phone = normalizePhoneForOperator(raw);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami. Raqam +998 kodini o\'z ichiga olishi kerak. Misol: +998901234567');
 
-  const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
+  const data = readJson(phonesFile(), { phones: [], updatedAt: null });
   const isNew = !data.phones.includes(phone);
   if (isNew) {
     data.phones.push(phone);
     data.phones.sort();
     data.updatedAt = new Date().toISOString();
-    writeJson(PHONES_FILE, data);
+    writeJson(phonesFile(), data);
   }
 
   const emp = getEmployee(phone);
@@ -179,10 +187,10 @@ export function removePhone(raw) {
   const phone = normalizePhone(raw) || normalizePhoneForOperator(raw);
   if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
 
-  const data = readJson(PHONES_FILE, { phones: [], updatedAt: null });
+  const data = readJson(phonesFile(), { phones: [], updatedAt: null });
   data.phones = data.phones.filter(p => p !== phone);
   data.updatedAt = new Date().toISOString();
-  writeJson(PHONES_FILE, data);
+  writeJson(phonesFile(), data);
   triggerSync();
   return phone;
 }
@@ -194,12 +202,12 @@ export function isPhoneAllowed(raw) {
 }
 
 export function getSession(telegramId) {
-  const sessions = readJson(SESSIONS_FILE, {});
+  const sessions = readJson(sessionsFile(), {});
   return sessions[String(telegramId)] || null;
 }
 
 function readAllSessions() {
-  return readJson(SESSIONS_FILE, {});
+  return readJson(sessionsFile(), {});
 }
 
 export function listTelegramIdsForPhones(phones) {
@@ -246,7 +254,7 @@ function telegramProfile(tgUser = {}) {
 }
 
 export function setSession(telegramId, phone, tgUser = {}) {
-  const sessions = readJson(SESSIONS_FILE, {});
+  const sessions = readJson(sessionsFile(), {});
   const normalized = normalizePhone(phone) || normalizePhoneForOperator(phone);
   const previous = sessions[String(telegramId)] || {};
   sessions[String(telegramId)] = {
@@ -255,12 +263,12 @@ export function setSession(telegramId, phone, tgUser = {}) {
     lastSeenAt: new Date().toISOString(),
     ...telegramProfile(tgUser),
   };
-  writeJson(SESSIONS_FILE, sessions);
+  writeJson(sessionsFile(), sessions);
   return sessions[String(telegramId)];
 }
 
 export function touchSessionProfile(telegramId, tgUser = {}) {
-  const sessions = readJson(SESSIONS_FILE, {});
+  const sessions = readJson(sessionsFile(), {});
   const key = String(telegramId);
   if (!sessions[key]) return null;
   sessions[key] = {
@@ -268,16 +276,16 @@ export function touchSessionProfile(telegramId, tgUser = {}) {
     ...telegramProfile(tgUser),
     lastSeenAt: new Date().toISOString(),
   };
-  writeJson(SESSIONS_FILE, sessions);
+  writeJson(sessionsFile(), sessions);
   return sessions[key];
 }
 
 function readEmployees() {
-  return readJson(EMPLOYEES_FILE, {});
+  return readJson(employeesFile(), {});
 }
 
 function writeEmployees(all) {
-  writeJson(EMPLOYEES_FILE, all);
+  writeJson(employeesFile(), all);
   triggerSync();
 }
 
@@ -293,7 +301,7 @@ export function getEmployee(rawPhone) {
   const migrated = migrateEmployee({ ...all[phone] });
   if (JSON.stringify(migrated) !== JSON.stringify(all[phone])) {
     all[phone] = migrated;
-    writeJson(EMPLOYEES_FILE, all);
+    writeJson(employeesFile(), all);
   }
   return migrated;
 }
@@ -529,7 +537,7 @@ export function submitKyc(rawPhone, documents) {
 }
 
 export function applyApprovedKyc(rawPhone, onboarding) {
-  const phone = normalizePhone(rawPhone);
+  const phone = resolvePhoneKey(rawPhone);
   if (!phone) throw new Error('INVALID_DATA');
   if (onboarding?.kycStatus !== 'approved' || !onboarding?.kycDocuments) {
     throw new Error('KYC_NOT_APPROVED');
@@ -545,6 +553,7 @@ export function applyApprovedKyc(rawPhone, onboarding) {
   emp.kycReviewedByName = onboarding.kycReviewedByName || '';
   emp.kycRejectionReason = '';
   emp.updatedAt = now;
+  assignClientIdIfMissing(emp);
   all[phone] = emp;
   writeEmployees(all);
   return emp;

@@ -55,7 +55,7 @@ export function StaffClientGrid({
                   <span>{client.fullName || 'Имя не заполнено'}</span>
                 </button>
               </td>
-              <td>{client.phone}</td>
+              <td>{client.phone || '—'}</td>
               <td className="staff-client-grid__telegram">
                 {client.telegramLinked ? (
                   <>
@@ -80,7 +80,7 @@ export function StaffClientGrid({
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={busyCells.has(cellKey)}
+                        disabled={Boolean(client.provisional) || busyCells.has(cellKey)}
                         aria-label={`${tag.label}: ${client.fullName || `клиент ${client.clientId}`}`}
                         onChange={event => onToggleTag(client, tag, event.currentTarget.checked)}
                       />

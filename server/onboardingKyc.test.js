@@ -55,6 +55,47 @@ test('onboarding KYC must be approved before it can be linked to a phone', async
   }
 });
 
+test('approved onboarding KYC can be assigned a phone from staff panel', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-assign-'));
+  const previous = process.env.DATA_DIR;
+  process.env.DATA_DIR = dataDir;
+
+  try {
+    const onboarding = await import('./onboardingKyc.js');
+    const store = await import('./store.js');
+    const tgUser = {
+      id: 777,
+      username: 'new_lead',
+      first_name: 'Dilshod',
+      last_name: 'Aliyev',
+    };
+    onboarding.submitOnboardingKyc(tgUser, {
+      idCardFront: { path: 'attachments/tg_777/front.jpg' },
+      idCardBack: { path: 'attachments/tg_777/back.jpg' },
+      selfie: { path: 'attachments/tg_777/selfie.jpg' },
+    });
+    onboarding.reviewOnboardingKyc(tgUser.id, 'approved', { id: 1, name: 'Admin' });
+    assert.equal(onboarding.listApprovedUnlinkedOnboardingKyc().length, 1);
+
+    const result = onboarding.assignOnboardingPhone(
+      tgUser.id,
+      '901112233',
+      { id: 1, name: 'Admin', deskOperatorName: 'Admin' },
+    );
+    assert.equal(result.phone, '+998901112233');
+    assert.equal(result.employee.kycStatus, 'approved');
+    assert.equal(result.employee.fullName, 'Dilshod Aliyev');
+    assert.equal(result.record.linkedPhone, '+998901112233');
+    assert.equal(onboarding.listApprovedUnlinkedOnboardingKyc().length, 0);
+    assert.equal(store.getSession(tgUser.id)?.phone, '+998901112233');
+    assert.equal(store.isPhoneAllowed('+998901112233'), true);
+  } finally {
+    if (previous === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('onboarding KYC recovers pending records from attachment folders', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-recover-'));
   const previous = process.env.DATA_DIR;

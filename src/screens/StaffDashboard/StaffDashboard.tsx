@@ -4,7 +4,7 @@ import {
 import {
   assignClientTag, fetchKycDocument, fetchOnboardingKycDocument,
   fetchStaffDashboard, fetchStaffTags, removeClientTag, reviewKyc,
-  reviewOnboardingKyc, selectDeskOperator,
+  reviewOnboardingKyc, assignOnboardingPhone, selectDeskOperator,
   type StaffClient, type StaffDashboardData, type StaffOnboardingKyc, type StaffTag,
 } from '../../api/staff';
 import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
@@ -73,6 +73,15 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [telegramFilter, setTelegramFilter] = useState('');
   const [activityWindow, setActivityWindow] = useState<ActivityWindow>('all');
   const [activitySince, setActivitySince] = useState<number | null>(null);
+  const [provisionalPhone, setProvisionalPhone] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+
+  const selectedProvisional = useMemo(() => {
+    if (!selectedClientId || !data) return null;
+    return data.clients.find(client => (
+      client.clientId === selectedClientId && Boolean(client.provisional)
+    )) || null;
+  }, [data, selectedClientId]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -201,6 +210,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   ]);
 
   const toggleClientTag = async (client: StaffClient, tag: StaffTag, checked: boolean) => {
+    if (client.provisional) return;
     const cellKey = `${client.clientId}:${tag.id}`;
     if (busyTagCells.has(cellKey)) return;
     setBusyTagCells(current => new Set(current).add(cellKey));
@@ -319,6 +329,29 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
       setError('Не удалось сменить имя оператора.');
     } finally {
       setSavingDesk(false);
+    }
+  };
+
+  const saveProvisionalPhone = async () => {
+    if (!selectedProvisional?.telegramId) return;
+    const phone = provisionalPhone.trim();
+    if (phone.length < 9) {
+      setError('Введите номер телефона клиента.');
+      return;
+    }
+    setSavingPhone(true);
+    setError('');
+    try {
+      const response = await assignOnboardingPhone(selectedProvisional.telegramId, phone);
+      setNotice(`Телефон сохранён: ${response.phone}`);
+      setSelectedClientId(response.client.clientId);
+      setProvisionalPhone('');
+      await refresh();
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } catch {
+      setError('Не удалось сохранить номер. Проверьте формат (+998…).');
+    } finally {
+      setSavingPhone(false);
     }
   };
 
@@ -588,7 +621,10 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
             clients={visibleClients}
             tags={tags}
             busyCells={busyTagCells}
-            onOpenClient={setSelectedClientId}
+            onOpenClient={(clientId) => {
+              setSelectedClientId(clientId);
+              setProvisionalPhone('');
+            }}
             onToggleTag={(client, tag, checked) => {
               void toggleClientTag(client, tag, checked);
             }}
@@ -599,7 +635,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
           role={data?.profile.role || 'operator'}
           deskName={data?.profile.deskName || ''}
           showActions
-          selectedClientId={selectedClientId}
+          selectedClientId={selectedProvisional ? null : selectedClientId}
           onCloseClient={() => setSelectedClientId(null)}
           onRefresh={refresh}
           onError={setError}
@@ -611,7 +647,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
         />
       )}
 
-      {tab !== 'actions' && selectedClientId && (
+      {tab !== 'actions' && selectedClientId && !selectedProvisional && (
         <StaffTools
           role={data?.profile.role || 'operator'}
           deskName={data?.profile.deskName || ''}
@@ -626,6 +662,70 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
             void openDocuments(client);
           }}
         />
+      )}
+
+      {selectedProvisional && (
+        <div className="staff-tool-modal" role="dialog" aria-modal="true">
+          <div className="staff-tool-modal__sheet">
+            <header>
+              <h2>
+                {selectedProvisional.fullName || selectedProvisional.telegramUsername || 'Клиент KYC'}
+              </h2>
+              <button type="button" onClick={() => setSelectedClientId(null)}>×</button>
+            </header>
+            <div className="staff-client-detail__summary">
+              <strong>KYC подтверждён · телефон ещё не указан</strong>
+              <span>
+                TG {selectedProvisional.telegramId}
+                {selectedProvisional.telegramUsername
+                  ? ` · @${selectedProvisional.telegramUsername}`
+                  : ''}
+              </span>
+            </div>
+            <div className="staff-tool-form">
+              <label>
+                Номер телефона
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={provisionalPhone}
+                  placeholder="+998901234567"
+                  onChange={event => setProvisionalPhone(event.target.value)}
+                  disabled={savingPhone}
+                />
+              </label>
+              <button
+                type="button"
+                className="staff-tool-primary"
+                onClick={() => { void saveProvisionalPhone(); }}
+                disabled={savingPhone || provisionalPhone.trim().length < 9}
+              >
+                {savingPhone ? 'Сохраняем…' : 'Сохранить номер'}
+              </button>
+              {selectedProvisional.hasKycDocuments && (
+                <button
+                  type="button"
+                  className="staff-tool-secondary"
+                  onClick={() => {
+                    const request: StaffOnboardingKyc = {
+                      telegramId: Number(selectedProvisional.telegramId),
+                      telegramUsername: selectedProvisional.telegramUsername,
+                      telegramDisplayName: selectedProvisional.telegramDisplayName,
+                      kycStatus: 'approved',
+                      kycSubmittedAt: selectedProvisional.kycSubmittedAt,
+                      kycRejectionReason: '',
+                      provisionalId: selectedProvisional.clientId,
+                    };
+                    setSelectedClientId(null);
+                    void openOnboardingDocuments(request);
+                  }}
+                >
+                  Документы
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {(documentClient || onboardingDocument) && documentUrls && (
@@ -651,7 +751,8 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
               <figure><img src={documentUrls.idCardBack} alt="Обратная сторона ID-карты" /><figcaption>ID-карта · обратная</figcaption></figure>
               <figure><img src={documentUrls.selfie} alt="Селфи с ID-картой" /><figcaption>Селфи с документом</figcaption></figure>
             </div>
-            {onboardingDocument || documentClient?.kycStatus === 'pending' ? (
+            {(onboardingDocument?.kycStatus === 'pending'
+              || documentClient?.kycStatus === 'pending') ? (
               <>
                 <label className="staff-kyc-modal__reason">
                   Причина отказа
@@ -680,7 +781,9 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
               </>
             ) : (
               <p className="staff-kyc-modal__reviewed">
-                Решение уже принято: {statusLabel(documentClient?.kycStatus || 'none')}
+                Решение уже принято: {statusLabel(
+                  onboardingDocument?.kycStatus || documentClient?.kycStatus || 'none',
+                )}
               </p>
             )}
           </div>

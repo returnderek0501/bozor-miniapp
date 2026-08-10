@@ -1,13 +1,15 @@
 import { join } from 'path';
-import { DATA_DIR, readJson, writeJson } from './dataPath.js';
+import { getDataDir, readJson, writeJson } from './dataPath.js';
 
-const COUNTER_FILE = join(DATA_DIR, 'client_counter.json');
+function counterFile() {
+  return join(getDataDir(), 'client_counter.json');
+}
 
 export function nextClientId() {
-  const data = readJson(COUNTER_FILE, { next: 1 });
+  const data = readJson(counterFile(), { next: 1 });
   const id = String(data.next);
   data.next += 1;
-  writeJson(COUNTER_FILE, data);
+  writeJson(counterFile(), data);
   return id;
 }
 

@@ -64,6 +64,7 @@ export interface StaffClient {
   telegramLastSeenAt: string | null;
   kycReviewedByName?: string;
   hasKycDocuments?: boolean;
+  provisional?: boolean;
 }
 
 export interface StaffDashboardData {
@@ -74,6 +75,7 @@ export interface StaffDashboardData {
     incomplete: number;
     approvedKyc: number;
     onboardingPending?: number;
+    provisionalClients?: number;
     recoveredOnboarding?: number;
   };
   clients: StaffClient[];
@@ -174,10 +176,20 @@ export function reviewOnboardingKyc(
   telegramId: number,
   decision: 'approved' | 'rejected',
   reason = '',
-): Promise<{ success: boolean; request: StaffOnboardingKyc }> {
+): Promise<{ success: boolean; request: StaffOnboardingKyc; client?: StaffClient | null }> {
   return jsonRequest(`/api/staff/onboarding-kyc/${telegramId}/review`, {
     method: 'POST',
     body: JSON.stringify({ decision, reason }),
+  });
+}
+
+export function assignOnboardingPhone(
+  telegramId: number,
+  phone: string,
+): Promise<{ success: boolean; phone: string; client: StaffClient }> {
+  return jsonRequest(`/api/staff/onboarding-kyc/${telegramId}/assign-phone`, {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
   });
 }
 

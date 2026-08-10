@@ -32,7 +32,7 @@ import {
   getBrowserAdminPath, loginBrowserAdmin, logoutBrowserAdmin, readBrowserSession,
   browserSessionCookie, clearBrowserSessionCookie, BROWSER_COOKIE_NAME,
 } from './browserAuth.js';
-import { staffClientSummary, staffClientDetail } from './staffDto.js';
+import { staffClientSummary, staffClientDetail, staffOnboardingClientSummary } from './staffDto.js';
 import {
   listTagsForUser, addTag, removeTag, GLOBAL_TAG_COUNT,
 } from './tags.js';
@@ -53,8 +53,9 @@ import { getBotStatus } from './botStatus.js';
 import { buildClientAuthStatus } from './clientAuth.js';
 import {
   getOnboardingKyc, onboardingKycStatus, submitOnboardingKyc,
-  listPendingOnboardingKyc, reviewOnboardingKyc, linkOnboardingKyc,
-  onboardingKycStats, reconcileOnboardingFromAttachments,
+  listPendingOnboardingKyc, listApprovedUnlinkedOnboardingKyc, reviewOnboardingKyc,
+  linkOnboardingKyc, onboardingKycStats, reconcileOnboardingFromAttachments,
+  assignOnboardingPhone,
 } from './onboardingKyc.js';
 import { getDataDir } from './dataPath.js';
 
@@ -305,19 +306,32 @@ export function createApiRouter(botToken) {
     const employees = !staff.isAdmin && !staff.deskName
       ? []
       : listEmployeesForUser(staff.tgUser.id, staff.deskName);
-    const clients = employees
-      .map(staffClientSummary)
-      .sort((a, b) => Number(b.clientId || 0) - Number(a.clientId || 0));
+    const realClients = employees.map(staffClientSummary);
+    const linkedTelegramIds = new Set(
+      realClients.map(client => Number(client.telegramId)).filter(Boolean),
+    );
+    // Approved KYC without a phone still appears in the clients panel.
+    const provisionalClients = listApprovedUnlinkedOnboardingKyc()
+      .filter(record => !linkedTelegramIds.has(Number(record.telegramId)))
+      .map(staffOnboardingClientSummary);
+    const clients = [...provisionalClients, ...realClients]
+      .sort((a, b) => {
+        const aTime = Date.parse(a.updatedAt || a.createdAt || '') || 0;
+        const bTime = Date.parse(b.updatedAt || b.createdAt || '') || 0;
+        if (bTime !== aTime) return bTime - aTime;
+        return String(b.clientId).localeCompare(String(a.clientId), 'en', { numeric: true });
+      });
     const onboardingKyc = listPendingOnboardingKyc({ reconcile: false }).map(onboardingKycSummary);
     return res.json({
       profile: staffStatus(staff),
       stats: {
         clients: clients.length,
-        pendingKyc: clients.filter(client => client.kycStatus === 'pending').length
+        pendingKyc: realClients.filter(client => client.kycStatus === 'pending').length
           + onboardingKyc.length,
         incomplete: clients.filter(client => !client.profileComplete).length,
         approvedKyc: clients.filter(client => client.kycStatus === 'approved').length,
         onboardingPending: onboardingKyc.length,
+        provisionalClients: provisionalClients.length,
         recoveredOnboarding: recovered,
       },
       clients,
@@ -750,11 +764,46 @@ export function createApiRouter(botToken) {
         linkOnboardingKyc(record.telegramId, session.phone);
       }
       await notifyOnboardingKycResult(record, decision === 'approved');
-      return res.json({ success: true, request: onboardingKycSummary(record) });
+      return res.json({
+        success: true,
+        request: onboardingKycSummary(record),
+        client: decision === 'approved' && !record.linkedPhone
+          ? staffOnboardingClientSummary(record)
+          : null,
+      });
     } catch (error) {
       const code = error.message === 'KYC_NOT_PENDING' ? 'KYC_NOT_PENDING' : 'KYC_REVIEW_FAILED';
       return res.status(code === 'KYC_NOT_PENDING' ? 409 : 400)
         .json({ success: false, error: code });
+    }
+  });
+
+  router.post('/staff/onboarding-kyc/:telegramId/assign-phone', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const phone = String(req.body?.phone || '').trim();
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'INVALID_PHONE' });
+    }
+    try {
+      const result = assignOnboardingPhone(req.params.telegramId, phone, staff.actor);
+      return res.json({
+        success: true,
+        phone: result.phone,
+        client: staffClientDetail(result.employee),
+      });
+    } catch (error) {
+      const known = new Set([
+        'KYC_NOT_FOUND',
+        'KYC_NOT_APPROVED',
+        'KYC_ALREADY_LINKED',
+        'KYC_PHONE_MISMATCH',
+        'INVALID_DATA',
+      ]);
+      const code = known.has(error.message)
+        ? error.message
+        : (String(error.message || '').includes('telefon') ? 'INVALID_PHONE' : 'ASSIGN_PHONE_FAILED');
+      return res.status(code === 'KYC_NOT_FOUND' ? 404 : 400).json({ success: false, error: code });
     }
   });
 

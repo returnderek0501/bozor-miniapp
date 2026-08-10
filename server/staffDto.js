@@ -49,3 +49,41 @@ export function staffClientDetail(emp) {
     ),
   };
 }
+
+/** Map approved/unlinked onboarding KYC into the same shape as staff clients. */
+export function staffOnboardingClientSummary(record) {
+  const telegramDisplayName = [
+    record.telegramFirstName,
+    record.telegramLastName,
+  ].filter(Boolean).join(' ');
+  return {
+    clientId: String(record.provisionalId || `tg_${record.telegramId}`),
+    fullName: telegramDisplayName,
+    phone: '',
+    operator: '',
+    age: '',
+    maritalStatus: '',
+    employeeId: '',
+    advanceBalance: 0,
+    kycStatus: record.kycStatus || 'approved',
+    kycSubmittedAt: record.kycSubmittedAt || null,
+    kycReviewedAt: record.kycReviewedAt || null,
+    kycRejectionReason: record.kycRejectionReason || '',
+    tags: [],
+    createdAt: record.kycSubmittedAt || record.updatedAt || null,
+    updatedAt: record.updatedAt || record.kycReviewedAt || record.kycSubmittedAt || null,
+    profileComplete: false,
+    telegramId: Number(record.telegramId) || null,
+    telegramUsername: record.telegramUsername || '',
+    telegramDisplayName,
+    telegramLinked: true,
+    telegramLinkedAt: record.kycSubmittedAt || null,
+    telegramLastSeenAt: record.updatedAt || record.kycSubmittedAt || null,
+    provisional: true,
+    hasKycDocuments: Boolean(
+      record.kycDocuments?.idCardFront?.path
+      || record.kycDocuments?.idCardBack?.path
+      || record.kycDocuments?.selfie?.path
+    ),
+  };
+}
