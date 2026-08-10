@@ -34,13 +34,19 @@ function consumeAttempt(telegramId, now) {
   return true;
 }
 
+export function markStaffWebUnlocked(telegramId, now = Date.now()) {
+  const id = Number(telegramId);
+  if (!Number.isInteger(id) || id <= 0) return false;
+  webSessions.set(String(id), now + PANEL_SESSION_TTL_MS);
+  return true;
+}
+
 export function unlockStaffWeb(telegramId, code, now = Date.now()) {
   const id = Number(telegramId);
   if (!Number.isInteger(id) || id <= 0 || !consumeAttempt(id, now)) return false;
   if (!matchesPanelSecret(code)) return false;
   failedAttempts.delete(String(id));
-  webSessions.set(String(id), now + PANEL_SESSION_TTL_MS);
-  return true;
+  return markStaffWebUnlocked(id, now);
 }
 
 export function lockStaffWeb(telegramId) {

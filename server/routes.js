@@ -26,8 +26,12 @@ import {
   getActiveDeskOperator, listRecentDeskNames, rememberDeskOperatorName, enrichActorWithDesk,
 } from './deskOperators.js';
 import {
-  unlockStaffWeb, lockStaffWeb, isStaffWebUnlocked,
+  unlockStaffWeb, lockStaffWeb, isStaffWebUnlocked, markStaffWebUnlocked,
 } from './panelAccess.js';
+import {
+  getBrowserAdminPath, loginBrowserAdmin, logoutBrowserAdmin, readBrowserSession,
+  browserSessionCookie, clearBrowserSessionCookie, BROWSER_COOKIE_NAME,
+} from './browserAuth.js';
 import { staffClientSummary, staffClientDetail } from './staffDto.js';
 import {
   listTagsForUser, addTag, removeTag, GLOBAL_TAG_COUNT,
@@ -50,24 +54,49 @@ import { buildClientAuthStatus } from './clientAuth.js';
 import {
   getOnboardingKyc, onboardingKycStatus, submitOnboardingKyc,
   listPendingOnboardingKyc, reviewOnboardingKyc, linkOnboardingKyc,
+  onboardingKycStats, reconcileOnboardingFromAttachments,
 } from './onboardingKyc.js';
+import { getDataDir } from './dataPath.js';
 
 export function createApiRouter(botToken) {
   const router = Router();
 
   router.get('/health', (_req, res) => {
     const bot = getBotStatus();
+    let onboarding = { total: 0, pending: 0, approved: 0, rejected: 0 };
+    try {
+      onboarding = onboardingKycStats();
+    } catch (error) {
+      console.error('health onboarding stats failed:', error.message);
+    }
     res.json({
       ok: true,
       service: 'uztronix',
       bot,
+      dataDir: getDataDir(),
+      onboardingKyc: onboarding,
+      browserAdminPathConfigured: Boolean(getBrowserAdminPath()),
     });
   });
 
+  function isSecureRequest(req) {
+    return Boolean(req.secure || req.headers['x-forwarded-proto'] === 'https');
+  }
+
   function resolveTelegramUser(req) {
-    const initData = req.headers.authorization?.replace('tma ', '') || req.query.initData;
+    const initData = req.headers.authorization?.replace(/^tma\s+/i, '') || req.query.initData;
     if (botToken && initData) {
       return validateInitData(initData, botToken);
+    }
+    const browser = readBrowserSession(req);
+    if (browser?.telegramId) {
+      return {
+        id: browser.telegramId,
+        first_name: 'Admin',
+        last_name: '',
+        username: '',
+        browserSession: true,
+      };
     }
     if (!botToken && process.env.ALLOW_DEMO_AUTH === 'true' && req.query.demoId) {
       return { id: Number(req.query.demoId) || 0, first_name: 'Demo' };
@@ -98,8 +127,14 @@ export function createApiRouter(botToken) {
 
   function resolveUnlockedStaff(req) {
     const staff = resolveStaffIdentity(req);
-    if (!staff || !isStaffWebUnlocked(staff.tgUser.id)) return null;
-    return staff;
+    if (!staff) return null;
+    if (isStaffWebUnlocked(staff.tgUser.id)) return staff;
+    // Cookie-authenticated browser admins stay unlocked across process restarts.
+    if (staff.tgUser.browserSession && staff.isAdmin) {
+      markStaffWebUnlocked(staff.tgUser.id);
+      return staff;
+    }
+    return null;
   }
 
   function staffStatus(staff) {
@@ -188,6 +223,64 @@ export function createApiRouter(botToken) {
     return res.json({ success: true });
   });
 
+  router.get('/browser-auth/session', (req, res) => {
+    const browser = readBrowserSession(req);
+    if (!browser) {
+      return res.json({
+        authenticated: false,
+        pathHint: null,
+      });
+    }
+    const staff = resolveStaffIdentity(req);
+    if (!staff || !staff.isAdmin) {
+      return res.json({ authenticated: false, pathHint: null });
+    }
+    if (!isStaffWebUnlocked(staff.tgUser.id)) {
+      markStaffWebUnlocked(staff.tgUser.id);
+    }
+    return res.json({
+      authenticated: true,
+      unlocked: true,
+      ...staffStatus(staff),
+      browser: true,
+    });
+  });
+
+  router.post('/browser-auth/login', (req, res) => {
+    const telegramId = Number(req.body?.telegramId);
+    const code = String(req.body?.code || '').trim();
+    const result = loginBrowserAdmin(telegramId, code);
+    if (!result.ok) {
+      const status = result.error === 'TOO_MANY_ATTEMPTS' ? 429 : 403;
+      return res.status(status).json({ success: false, error: result.error });
+    }
+    res.setHeader('Set-Cookie', browserSessionCookie(result.token, { secure: isSecureRequest(req) }));
+    const staff = resolveStaffIdentity({
+      ...req,
+      headers: {
+        ...req.headers,
+        cookie: `${BROWSER_COOKIE_NAME}=${encodeURIComponent(result.token)}`,
+      },
+    });
+    return res.json({
+      success: true,
+      browser: true,
+      ...(staff ? staffStatus(staff) : {
+        staff: true,
+        unlocked: true,
+        role: 'admin',
+        name: 'Admin',
+      }),
+    });
+  });
+
+  router.post('/browser-auth/logout', (req, res) => {
+    const browser = readBrowserSession(req);
+    if (browser?.telegramId) logoutBrowserAdmin(browser.telegramId);
+    res.setHeader('Set-Cookie', clearBrowserSessionCookie({ secure: isSecureRequest(req) }));
+    return res.json({ success: true });
+  });
+
   router.post('/staff/desk', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
@@ -203,13 +296,19 @@ export function createApiRouter(botToken) {
   router.get('/staff/dashboard', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
+    let recovered = 0;
+    try {
+      recovered = reconcileOnboardingFromAttachments().recovered || 0;
+    } catch (error) {
+      console.error('dashboard onboarding reconcile failed:', error.message);
+    }
     const employees = !staff.isAdmin && !staff.deskName
       ? []
       : listEmployeesForUser(staff.tgUser.id, staff.deskName);
     const clients = employees
       .map(staffClientSummary)
       .sort((a, b) => Number(b.clientId || 0) - Number(a.clientId || 0));
-    const onboardingKyc = listPendingOnboardingKyc().map(onboardingKycSummary);
+    const onboardingKyc = listPendingOnboardingKyc({ reconcile: false }).map(onboardingKycSummary);
     return res.json({
       profile: staffStatus(staff),
       stats: {
@@ -218,6 +317,8 @@ export function createApiRouter(botToken) {
           + onboardingKyc.length,
         incomplete: clients.filter(client => !client.profileComplete).length,
         approvedKyc: clients.filter(client => client.kycStatus === 'approved').length,
+        onboardingPending: onboardingKyc.length,
+        recoveredOnboarding: recovered,
       },
       clients,
       onboardingKyc,

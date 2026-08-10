@@ -5,6 +5,11 @@
   padding: calc(18px + env(safe-area-inset-top, 0)) 16px 32px;
 }
 
+.staff-dashboard--browser {
+  width: min(100%, 1280px);
+  padding-top: 24px;
+}
+
 .staff-dashboard__header {
   display: flex;
   align-items: flex-start;

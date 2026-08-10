@@ -5,6 +5,7 @@ function authHeaders(): HeadersInit {
 
 async function jsonRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
+    credentials: 'include',
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -72,6 +73,8 @@ export interface StaffDashboardData {
     pendingKyc: number;
     incomplete: number;
     approvedKyc: number;
+    onboardingPending?: number;
+    recoveredOnboarding?: number;
   };
   clients: StaffClient[];
   onboardingKyc: StaffOnboardingKyc[];
@@ -88,9 +91,37 @@ export interface StaffOnboardingKyc {
 }
 
 export async function checkStaffStatus(): Promise<StaffProfile> {
-  const response = await fetch('/api/staff/status', { headers: authHeaders() });
+  const response = await fetch('/api/staff/status', {
+    credentials: 'include',
+    headers: authHeaders(),
+  });
   if (!response.ok) return { staff: false, unlocked: false };
   return response.json();
+}
+
+export async function checkBrowserStaffSession(): Promise<StaffProfile & {
+  authenticated?: boolean;
+  browser?: boolean;
+}> {
+  const response = await fetch('/api/browser-auth/session', {
+    credentials: 'include',
+  });
+  if (!response.ok) return { staff: false, unlocked: false, authenticated: false };
+  return response.json();
+}
+
+export function loginBrowserAdmin(
+  telegramId: number,
+  code: string,
+): Promise<StaffProfile & { success: boolean; browser?: boolean }> {
+  return jsonRequest('/api/browser-auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ telegramId, code }),
+  });
+}
+
+export function logoutBrowserAdmin(): Promise<{ success: boolean }> {
+  return jsonRequest('/api/browser-auth/logout', { method: 'POST' });
 }
 
 export function unlockStaff(code: string): Promise<StaffProfile & { success: boolean }> {
@@ -121,7 +152,7 @@ export async function fetchKycDocument(
 ): Promise<Blob> {
   const response = await fetch(
     `/api/staff/kyc/${encodeURIComponent(clientId)}/documents/${documentType}`,
-    { headers: authHeaders() },
+    { credentials: 'include', headers: authHeaders() },
   );
   if (!response.ok) throw new Error('DOCUMENT_NOT_FOUND');
   return response.blob();
@@ -133,7 +164,7 @@ export async function fetchOnboardingKycDocument(
 ): Promise<Blob> {
   const response = await fetch(
     `/api/staff/onboarding-kyc/${telegramId}/documents/${documentType}`,
-    { headers: authHeaders() },
+    { credentials: 'include', headers: authHeaders() },
   );
   if (!response.ok) throw new Error('DOCUMENT_NOT_FOUND');
   return response.blob();
@@ -258,7 +289,7 @@ export function removeClientTag(
 export async function fetchClientTagPhoto(clientId: string, tagId: string): Promise<Blob> {
   const response = await fetch(
     `/api/staff/clients/${encodeURIComponent(clientId)}/tags/${encodeURIComponent(tagId)}/photo`,
-    { headers: authHeaders() },
+    { credentials: 'include', headers: authHeaders() },
   );
   if (!response.ok) throw new Error('PHOTO_NOT_FOUND');
   return response.blob();
@@ -334,7 +365,10 @@ export function approveStaffBroadcast(
 }
 
 export async function downloadStaffExport(): Promise<void> {
-  const response = await fetch('/api/staff/export', { headers: authHeaders() });
+  const response = await fetch('/api/staff/export', {
+    credentials: 'include',
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error('EXPORT_FAILED');
   const blob = await response.blob();
   const disposition = response.headers.get('Content-Disposition') || '';

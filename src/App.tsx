@@ -14,11 +14,15 @@ import { DocumentsScreen } from './screens/DocumentsScreen/DocumentsScreen';
 import { BottomNav } from './components/BottomNav/BottomNav';
 import { Header } from './components/Header/Header';
 import { ThemeToggle } from './components/ThemeToggle/ThemeToggle';
-import { checkStaffStatus, lockStaff } from './api/staff';
+import {
+  checkBrowserStaffSession, checkStaffStatus, lockStaff, logoutBrowserAdmin,
+} from './api/staff';
 import { StaffGate } from './screens/StaffGate/StaffGate';
+import { BrowserStaffGate } from './screens/StaffGate/BrowserStaffGate';
 import { StaffDashboard } from './screens/StaffDashboard/StaffDashboard';
+import { isBrowserAdminRoute } from './browserAdmin';
 
-type AppState = 'loading' | 'staff-auth' | 'staff-ready' | 'kyc'
+type AppState = 'loading' | 'staff-auth' | 'staff-ready' | 'browser-auth' | 'kyc'
   | 'kyc-pending' | 'auth' | 'denied' | 'ready';
 
 export default function App() {
@@ -27,6 +31,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [kycRejected, setKycRejected] = useState(false);
   const [checkingKyc, setCheckingKyc] = useState(false);
+  const [browserMode] = useState(() => isBrowserAdminRoute());
 
   const resolveClientEntry = useCallback(async () => {
     const onboarding = await checkOnboardingKycStatus();
@@ -57,20 +62,38 @@ export default function App() {
       tg.expand();
     }
     let active = true;
-    void checkStaffStatus()
-      .then(async staffStatus => {
+
+    void (async () => {
+      if (browserMode) {
+        try {
+          const session = await checkBrowserStaffSession();
+          if (!active) return;
+          if (session.authenticated && session.unlocked) {
+            setState('staff-ready');
+            return;
+          }
+          setState('browser-auth');
+        } catch {
+          if (active) setState('browser-auth');
+        }
+        return;
+      }
+
+      try {
+        const staffStatus = await checkStaffStatus();
         if (!active) return;
         if (staffStatus.staff) {
           setState(staffStatus.unlocked ? 'staff-ready' : 'staff-auth');
           return;
         }
         await resolveClientEntry();
-      })
-      .catch(() => {
+      } catch {
         if (active) setState('kyc');
-      });
+      }
+    })();
+
     return () => { active = false; };
-  }, [resolveClientEntry]);
+  }, [browserMode, resolveClientEntry]);
 
   const handleKycComplete = useCallback(async (payload: KycOnboardingPayload) => {
     const result = await submitOnboardingKyc(
@@ -110,8 +133,12 @@ export default function App() {
   }, [resolveClientEntry]);
 
   const handleStaffLogout = useCallback(() => {
+    if (browserMode) {
+      void logoutBrowserAdmin().finally(() => setState('browser-auth'));
+      return;
+    }
     void lockStaff().finally(() => setState('staff-auth'));
-  }, []);
+  }, [browserMode]);
 
   if (state === 'loading') {
     return (
@@ -142,12 +169,16 @@ export default function App() {
     return <KycPendingGate checking={checkingKyc} onRefresh={refreshKycStatus} />;
   }
 
+  if (state === 'browser-auth') {
+    return <BrowserStaffGate onUnlocked={() => setState('staff-ready')} />;
+  }
+
   if (state === 'staff-auth') {
     return <StaffGate onUnlocked={() => setState('staff-ready')} />;
   }
 
   if (state === 'staff-ready') {
-    return <StaffDashboard onLogout={handleStaffLogout} />;
+    return <StaffDashboard onLogout={handleStaffLogout} browserMode={browserMode} />;
   }
 
   if (state === 'denied') {

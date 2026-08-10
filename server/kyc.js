@@ -123,11 +123,42 @@ export async function notifyOnboardingKycReview(record) {
     record.telegramUsername ? `Username: @${record.telegramUsername}` : 'Username: —',
     `Telegram ID: <code>${record.telegramId}</code>`,
     '',
-    'Откройте служебную Mini App для проверки документов.',
+    'Проверьте документы ниже или откройте служебную панель.',
   ].join('\n');
+  const keyboard = {
+    inline_keyboard: [[
+      { text: '✅ Принять', callback_data: `onkyc_ok:${record.telegramId}` },
+      { text: '❌ Отклонить', callback_data: `onkyc_rej:${record.telegramId}` },
+    ]],
+  };
+  const idCardFront = record.kycDocuments?.idCardFront;
+  const idCardBack = record.kycDocuments?.idCardBack;
+  const selfie = record.kycDocuments?.selfie;
+
   for (const chatId of targets) {
     try {
-      await botRef.sendMessage(chatId, message);
+      await botRef.sendMessage(chatId, message, { reply_markup: keyboard });
+      if (idCardFront?.path) {
+        await botRef.sendPhotoFile(
+          chatId,
+          attachmentAbsolutePath(idCardFront.path),
+          '📄 ID-карта (лицевая сторона)',
+        );
+      }
+      if (idCardBack?.path) {
+        await botRef.sendPhotoFile(
+          chatId,
+          attachmentAbsolutePath(idCardBack.path),
+          '📄 ID-карта (обратная сторона)',
+        );
+      }
+      if (selfie?.path) {
+        await botRef.sendPhotoFile(
+          chatId,
+          attachmentAbsolutePath(selfie.path),
+          '🤳 Селфи с ID-картой',
+        );
+      }
     } catch (error) {
       console.error(`Onboarding KYC notify failed for ${chatId}:`, error.message);
     }

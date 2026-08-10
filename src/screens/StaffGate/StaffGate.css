@@ -63,6 +63,17 @@
   text-align: center;
 }
 
+.staff-gate--browser .staff-gate__card input {
+  margin-top: 10px;
+  letter-spacing: 0.08em;
+  font-size: 18px;
+}
+
+.staff-gate--browser .staff-gate__card input:first-of-type {
+  margin-top: 0;
+  letter-spacing: 0.02em;
+}
+
 .staff-gate__card input:focus {
   border-color: var(--brand-blue);
 }

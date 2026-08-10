@@ -1,15 +1,32 @@
+import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-import { DATA_DIR, readJson, writeJson } from './dataPath.js';
+import { getDataDir, readJson, updateJsonSync } from './dataPath.js';
 
-const FILE = join(DATA_DIR, 'kyc_onboarding.json');
+const EMPTY = { records: {}, updatedAt: null };
 
-function loadData() {
-  return readJson(FILE, { records: {}, updatedAt: null });
+function filePath() {
+  return join(getDataDir(), 'kyc_onboarding.json');
 }
 
-function saveData(data) {
-  data.updatedAt = new Date().toISOString();
-  writeJson(FILE, data);
+function loadData() {
+  const data = readJson(filePath(), EMPTY);
+  if (!data || typeof data !== 'object') return { ...EMPTY, records: {} };
+  if (!data.records || typeof data.records !== 'object' || Array.isArray(data.records)) {
+    return { records: {}, updatedAt: data.updatedAt || null };
+  }
+  return data;
+}
+
+function mutate(updater) {
+  return updateJsonSync(filePath(), EMPTY, (current) => {
+    const data = (!current?.records || typeof current.records !== 'object'
+      || Array.isArray(current.records))
+      ? { records: {}, updatedAt: null }
+      : current;
+    updater(data);
+    data.updatedAt = new Date().toISOString();
+    return data;
+  });
 }
 
 function key(telegramId) {
@@ -23,6 +40,106 @@ function telegramProfile(tgUser = {}) {
     telegramFirstName: String(tgUser.first_name || ''),
     telegramLastName: String(tgUser.last_name || ''),
   };
+}
+
+function latestKycFile(files, prefix) {
+  const matches = files.filter(name => name.startsWith(prefix));
+  if (!matches.length) return null;
+  matches.sort((a, b) => {
+    const aTime = Number((a.match(/_(\d+)\./) || [])[1] || 0);
+    const bTime = Number((b.match(/_(\d+)\./) || [])[1] || 0);
+    return aTime - bTime;
+  });
+  return matches[matches.length - 1];
+}
+
+function documentFromFile(clientFolder, filename) {
+  if (!filename) return null;
+  const ext = filename.includes('.') ? `.${filename.split('.').pop()}` : '.jpg';
+  const mimeType = ext === '.png'
+    ? 'image/png'
+    : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+  const absolute = join(getDataDir(), 'attachments', clientFolder, filename);
+  let size = 0;
+  let savedAt = new Date().toISOString();
+  try {
+    const stats = statSync(absolute);
+    size = stats.size;
+    savedAt = stats.mtime.toISOString();
+  } catch {
+    // ignore missing stats
+  }
+  return {
+    path: `attachments/${clientFolder}/${filename}`,
+    mimeType,
+    size,
+    savedAt,
+  };
+}
+
+/**
+ * Rebuild missing onboarding KYC records from attachment folders.
+ * Helps when kyc_onboarding.json was wiped by a race/corrupt write but photos remain.
+ */
+export function reconcileOnboardingFromAttachments() {
+  const attachmentsRoot = join(getDataDir(), 'attachments');
+  if (!existsSync(attachmentsRoot)) return { recovered: 0, pending: listPendingOnboardingKyc({ reconcile: false }).length };
+
+  let recovered = 0;
+  mutate((data) => {
+    const folders = readdirSync(attachmentsRoot).filter(name => /^tg_\d+$/.test(name));
+    for (const folder of folders) {
+      const telegramId = Number(folder.slice(3));
+      if (!Number.isInteger(telegramId) || telegramId <= 0) continue;
+      const recordKey = key(telegramId);
+      const existing = data.records[recordKey];
+      if (existing?.kycStatus === 'pending' || existing?.kycStatus === 'approved') continue;
+
+      let files = [];
+      try {
+        files = readdirSync(join(attachmentsRoot, folder));
+      } catch {
+        continue;
+      }
+      const frontName = latestKycFile(files, 'kyc_id_card_front_');
+      const backName = latestKycFile(files, 'kyc_id_card_back_');
+      const selfieName = latestKycFile(files, 'kyc_selfie_');
+      if (!frontName || !backName || !selfieName) continue;
+
+      const documents = {
+        idCardFront: documentFromFile(folder, frontName),
+        idCardBack: documentFromFile(folder, backName),
+        selfie: documentFromFile(folder, selfieName),
+      };
+      const submittedAt = [
+        documents.idCardFront.savedAt,
+        documents.idCardBack.savedAt,
+        documents.selfie.savedAt,
+      ].sort().at(-1);
+
+      data.records[recordKey] = {
+        ...(existing || {}),
+        telegramId,
+        telegramUsername: existing?.telegramUsername || '',
+        telegramFirstName: existing?.telegramFirstName || '',
+        telegramLastName: existing?.telegramLastName || '',
+        provisionalId: `tg_${telegramId}`,
+        kycStatus: 'pending',
+        kycDocuments: documents,
+        kycSubmittedAt: existing?.kycSubmittedAt || submittedAt,
+        kycReviewedAt: null,
+        kycReviewedBy: null,
+        kycReviewedByName: '',
+        kycRejectionReason: '',
+        linkedPhone: existing?.linkedPhone || '',
+        recoveredFromAttachments: true,
+        updatedAt: new Date().toISOString(),
+      };
+      recovered += 1;
+    }
+  });
+
+  return { recovered, pending: listPendingOnboardingKyc({ reconcile: false }).length };
 }
 
 export function getOnboardingKyc(telegramId) {
@@ -40,66 +157,90 @@ export function onboardingKycStatus(telegramId) {
 }
 
 export function submitOnboardingKyc(tgUser, documents) {
-  const data = loadData();
-  const recordKey = key(tgUser.id);
-  const current = data.records[recordKey];
-  if (current?.kycStatus === 'pending') throw new Error('KYC_PENDING');
-  if (current?.kycStatus === 'approved') throw new Error('KYC_ALREADY_APPROVED');
-  if (!documents?.idCardFront?.path || !documents?.idCardBack?.path || !documents?.selfie?.path) {
-    throw new Error('KYC_DOCUMENTS_REQUIRED');
-  }
-  const now = new Date().toISOString();
-  const record = {
-    ...(current || {}),
-    ...telegramProfile(tgUser),
-    provisionalId: `tg_${Number(tgUser.id)}`,
-    kycStatus: 'pending',
-    kycDocuments: documents,
-    kycSubmittedAt: now,
-    kycReviewedAt: null,
-    kycReviewedBy: null,
-    kycReviewedByName: '',
-    kycRejectionReason: '',
-    linkedPhone: current?.linkedPhone || '',
-    updatedAt: now,
-  };
-  data.records[recordKey] = record;
-  saveData(data);
+  let record = null;
+  mutate((data) => {
+    const recordKey = key(tgUser.id);
+    const current = data.records[recordKey];
+    if (current?.kycStatus === 'pending') throw new Error('KYC_PENDING');
+    if (current?.kycStatus === 'approved') throw new Error('KYC_ALREADY_APPROVED');
+    if (!documents?.idCardFront?.path || !documents?.idCardBack?.path || !documents?.selfie?.path) {
+      throw new Error('KYC_DOCUMENTS_REQUIRED');
+    }
+    const now = new Date().toISOString();
+    record = {
+      ...(current || {}),
+      ...telegramProfile(tgUser),
+      provisionalId: `tg_${Number(tgUser.id)}`,
+      kycStatus: 'pending',
+      kycDocuments: documents,
+      kycSubmittedAt: now,
+      kycReviewedAt: null,
+      kycReviewedBy: null,
+      kycReviewedByName: '',
+      kycRejectionReason: '',
+      linkedPhone: current?.linkedPhone || '',
+      recoveredFromAttachments: false,
+      updatedAt: now,
+    };
+    data.records[recordKey] = record;
+  });
   return record;
 }
 
-export function listPendingOnboardingKyc() {
+export function listPendingOnboardingKyc({ reconcile = true } = {}) {
+  if (reconcile) {
+    try {
+      reconcileOnboardingFromAttachments();
+    } catch (error) {
+      console.error('Onboarding KYC reconcile failed:', error.message);
+    }
+  }
   return Object.values(loadData().records)
     .filter(record => record.kycStatus === 'pending')
     .sort((a, b) => String(a.kycSubmittedAt).localeCompare(String(b.kycSubmittedAt)));
 }
 
+export function onboardingKycStats() {
+  const records = Object.values(loadData().records);
+  return {
+    total: records.length,
+    pending: records.filter(record => record.kycStatus === 'pending').length,
+    approved: records.filter(record => record.kycStatus === 'approved').length,
+    rejected: records.filter(record => record.kycStatus === 'rejected').length,
+    dataFile: filePath(),
+  };
+}
+
 export function reviewOnboardingKyc(telegramId, decision, reviewer = null, reason = '') {
   if (decision !== 'approved' && decision !== 'rejected') throw new Error('INVALID_KYC_STATUS');
-  const data = loadData();
-  const recordKey = key(telegramId);
-  const record = data.records[recordKey];
-  if (!record || record.kycStatus !== 'pending') throw new Error('KYC_NOT_PENDING');
-  const now = new Date().toISOString();
-  record.kycStatus = decision;
-  record.kycReviewedAt = now;
-  record.kycReviewedBy = reviewer?.id ?? null;
-  record.kycReviewedByName = reviewer?.deskOperatorName || reviewer?.name || reviewer?.operatorName || '';
-  record.kycRejectionReason = decision === 'rejected' ? String(reason || '').trim() : '';
-  record.updatedAt = now;
-  saveData(data);
+  let record = null;
+  mutate((data) => {
+    const recordKey = key(telegramId);
+    record = data.records[recordKey];
+    if (!record || record.kycStatus !== 'pending') throw new Error('KYC_NOT_PENDING');
+    const now = new Date().toISOString();
+    record.kycStatus = decision;
+    record.kycReviewedAt = now;
+    record.kycReviewedBy = reviewer?.id ?? null;
+    record.kycReviewedByName = reviewer?.deskOperatorName || reviewer?.name || reviewer?.operatorName || '';
+    record.kycRejectionReason = decision === 'rejected' ? String(reason || '').trim() : '';
+    record.updatedAt = now;
+    data.records[recordKey] = record;
+  });
   return record;
 }
 
 export function linkOnboardingKyc(telegramId, phone) {
-  const data = loadData();
-  const record = data.records[key(telegramId)];
-  if (!record || record.kycStatus !== 'approved') throw new Error('KYC_NOT_APPROVED');
-  if (record.linkedPhone && record.linkedPhone !== String(phone || '')) {
-    throw new Error('KYC_PHONE_MISMATCH');
-  }
-  record.linkedPhone = String(phone || '');
-  record.updatedAt = new Date().toISOString();
-  saveData(data);
+  let record = null;
+  mutate((data) => {
+    record = data.records[key(telegramId)];
+    if (!record || record.kycStatus !== 'approved') throw new Error('KYC_NOT_APPROVED');
+    if (record.linkedPhone && record.linkedPhone !== String(phone || '')) {
+      throw new Error('KYC_PHONE_MISMATCH');
+    }
+    record.linkedPhone = String(phone || '');
+    record.updatedAt = new Date().toISOString();
+    data.records[key(telegramId)] = record;
+  });
   return record;
 }

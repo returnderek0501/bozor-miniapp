@@ -14,6 +14,7 @@ import './StaffDashboard.css';
 
 interface Props {
   onLogout: () => void;
+  browserMode?: boolean;
 }
 
 type Tab = 'kyc' | 'clients' | 'actions';
@@ -46,7 +47,7 @@ function statusLabel(status: StaffClient['kycStatus']) {
   return 'Не пройден';
 }
 
-export function StaffDashboard({ onLogout }: Props) {
+export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [data, setData] = useState<StaffDashboardData | null>(null);
   const [tab, setTab] = useState<Tab>('kyc');
   const [loading, setLoading] = useState(true);
@@ -103,6 +104,11 @@ export function StaffDashboard({ onLogout }: Props) {
         setData(dashboard);
         setTags(tagData.tags);
         setDeskName(dashboard.profile.deskName || '');
+        if (dashboard.stats.recoveredOnboarding) {
+          setNotice(
+            `Восстановлено заявок KYC из вложений: ${dashboard.stats.recoveredOnboarding}`,
+          );
+        }
       })
       .catch(requestError => {
         if (!active) return;
@@ -114,6 +120,24 @@ export function StaffDashboard({ onLogout }: Props) {
       });
     return () => { active = false; };
   }, [onLogout]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchStaffDashboard()
+        .then(dashboard => {
+          setData(dashboard);
+          if (dashboard.stats.recoveredOnboarding) {
+            setNotice(
+              `Восстановлено заявок KYC из вложений: ${dashboard.stats.recoveredOnboarding}`,
+            );
+          }
+        })
+        .catch(() => {
+          // Keep current data on background refresh errors.
+        });
+    }, 20_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => () => {
     if (documentUrls) Object.values(documentUrls).forEach(URL.revokeObjectURL);
@@ -303,11 +327,13 @@ export function StaffDashboard({ onLogout }: Props) {
   }
 
   return (
-    <main className="staff-dashboard">
+    <main className={`staff-dashboard${browserMode ? ' staff-dashboard--browser' : ''}`}>
       <header className="staff-dashboard__header">
         <div>
           <span className="staff-dashboard__eyebrow">
-            {data?.profile.role === 'admin' ? 'Администратор' : 'Оператор'}
+            {browserMode
+              ? 'Браузер · Администратор'
+              : data?.profile.role === 'admin' ? 'Администратор' : 'Оператор'}
           </span>
           <h1>Служебная панель</h1>
           <p>{data?.profile.name || data?.profile.deskName || 'Сотрудник'}</p>
@@ -348,6 +374,10 @@ export function StaffDashboard({ onLogout }: Props) {
         <article><strong>{data?.stats.clients || 0}</strong><span>Клиентов</span></article>
         <article className="staff-dashboard__stat--warning">
           <strong>{data?.stats.pendingKyc || 0}</strong><span>KYC на проверке</span>
+        </article>
+        <article>
+          <strong>{data?.stats.onboardingPending || pendingOnboarding.length}</strong>
+          <span>KYC до телефона</span>
         </article>
         <article><strong>{data?.stats.approvedKyc || 0}</strong><span>KYC подтверждено</span></article>
         <article><strong>{data?.stats.incomplete || 0}</strong><span>Не заполнено</span></article>

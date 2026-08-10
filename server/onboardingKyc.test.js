@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,21 +12,23 @@ const documents = {
 
 test('onboarding KYC must be approved before it can be linked to a phone', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-test-'));
+  const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
-  const onboarding = await import('./onboardingKyc.js');
-  const store = await import('./store.js');
-  const tgUser = {
-    id: 123,
-    username: 'test_user',
-    first_name: 'Test',
-    last_name: 'User',
-  };
 
   try {
+    const onboarding = await import('./onboardingKyc.js');
+    const store = await import('./store.js');
+    const tgUser = {
+      id: 123,
+      username: 'test_user',
+      first_name: 'Test',
+      last_name: 'User',
+    };
+
     assert.equal(onboarding.onboardingKycStatus(tgUser.id).kycStatus, 'none');
     const pending = onboarding.submitOnboardingKyc(tgUser, documents);
     assert.equal(pending.kycStatus, 'pending');
-    assert.equal(onboarding.listPendingOnboardingKyc().length, 1);
+    assert.equal(onboarding.listPendingOnboardingKyc({ reconcile: false }).length, 1);
     assert.throws(() => onboarding.linkOnboardingKyc(tgUser.id, '+998901234567'), /KYC_NOT_APPROVED/);
 
     const approved = onboarding.reviewOnboardingKyc(
@@ -47,6 +49,35 @@ test('onboarding KYC must be approved before it can be linked to a phone', async
       /KYC_PHONE_MISMATCH/,
     );
   } finally {
+    if (previous === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('onboarding KYC recovers pending records from attachment folders', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-recover-'));
+  const previous = process.env.DATA_DIR;
+  process.env.DATA_DIR = dataDir;
+  const folder = join(dataDir, 'attachments', 'tg_555001');
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'kyc_id_card_front_100.jpg'), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  writeFileSync(join(folder, 'kyc_id_card_back_101.jpg'), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  writeFileSync(join(folder, 'kyc_selfie_102.jpg'), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+  try {
+    const onboarding = await import('./onboardingKyc.js');
+    assert.equal(onboarding.getOnboardingKyc(555001), null);
+    const result = onboarding.reconcileOnboardingFromAttachments();
+    assert.ok(result.recovered >= 1);
+    const pending = onboarding.listPendingOnboardingKyc({ reconcile: false })
+      .filter(record => record.telegramId === 555001);
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].kycStatus, 'pending');
+    assert.match(pending[0].kycDocuments.idCardFront.path, /kyc_id_card_front_100/);
+  } finally {
+    if (previous === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
     rmSync(dataDir, { recursive: true, force: true });
   }
 });

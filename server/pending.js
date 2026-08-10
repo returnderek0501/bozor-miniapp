@@ -10,6 +10,7 @@ const addStaff = new Map();
 const addTagLabel = new Map();
 const deskOperatorName = new Map();
 const kycReject = new Map();
+const onboardingKycReject = new Map();
 const tagReminderSnooze = new Map();
 
 export function clearAllPending(chatId) {
@@ -25,6 +26,7 @@ export function clearAllPending(chatId) {
   addTagLabel.delete(chatId);
   deskOperatorName.delete(chatId);
   kycReject.delete(chatId);
+  onboardingKycReject.delete(chatId);
   tagReminderSnooze.delete(chatId);
 }
 
@@ -41,5 +43,6 @@ export const pending = {
   addTagLabel,
   deskOperatorName,
   kycReject,
+  onboardingKycReject,
   tagReminderSnooze,
 };

@@ -6,6 +6,8 @@ import { startBot } from './server/bot.js';
 import { getDataDir } from './server/dataPath.js';
 import { isSheetsConfigured } from './server/sheets.js';
 import { updateBotStatus } from './server/botStatus.js';
+import { reconcileOnboardingFromAttachments, onboardingKycStats } from './server/onboardingKyc.js';
+import { getBrowserAdminPath } from './server/browserAuth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -30,6 +32,16 @@ app.listen(PORT, () => {
   console.log(`Uztronix server running on port ${PORT}`);
   console.log(`Data directory: ${getDataDir()}`);
   console.log(`Google Sheets sync: ${isSheetsConfigured() ? 'enabled' : 'disabled'}`);
+  console.log(`Browser admin path: ${getBrowserAdminPath()}`);
+  try {
+    const recovered = reconcileOnboardingFromAttachments();
+    const stats = onboardingKycStats();
+    console.log(
+      `Onboarding KYC: pending=${stats.pending} total=${stats.total} recovered=${recovered.recovered}`,
+    );
+  } catch (error) {
+    console.error('Onboarding KYC startup reconcile failed:', error.message);
+  }
   if (BOT_TOKEN) {
     startBot(BOT_TOKEN);
   } else {

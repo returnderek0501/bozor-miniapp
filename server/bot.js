@@ -5,7 +5,7 @@ import {
   addClientTag, removeClientTag, addClientTagFreeform,
   setEmployeeOperator,
   listTelegramIdsForPhones, getTelegramIdByPhone,
-  setKycStatus,
+  setKycStatus, getSession, isPhoneAllowed, applyApprovedKyc,
 } from './store.js';
 import { isAdmin, listAdmins, addAdmin, isEnvAdmin } from './admins.js';
 import { listOperators, addOperatorByTelegramId } from './operators.js';
@@ -28,13 +28,17 @@ import {
   getActiveDeskOperator, listRecentDeskNames, rememberDeskOperatorName, enrichActorWithDesk,
 } from './deskOperators.js';
 import {
-  setKycBot, sendKycDocumentsToChat, notifyClientKycResult, kycStatusLabel,
+  setKycBot, sendKycDocumentsToChat, notifyClientKycResult, notifyOnboardingKycResult,
+  kycStatusLabel,
 } from './kyc.js';
 import { setStaffMessagingBot } from './staffMessaging.js';
 import { updateBotStatus } from './botStatus.js';
 import {
   ignoreTagReminder, snoozeTagReminder, startTagReminderScheduler,
 } from './tagReminders.js';
+import {
+  getOnboardingKyc, reviewOnboardingKyc, linkOnboardingKyc,
+} from './onboardingKyc.js';
 
 function normalizeCmd(text) {
   return String(text || '').trim().split(/\s+/)[0].split('@')[0].toLowerCase();
@@ -512,6 +516,46 @@ async function rejectKyc(bot, chatId, fromId, displayName, phone, reason) {
   return updated;
 }
 
+function onboardingKycRejectionKeyboard(telegramId) {
+  return ik([
+    [{ text: '🌫 Фото размыто', callback_data: `onkyc_reason:blur:${telegramId}` }],
+    [{ text: '🔎 Не видны данные', callback_data: `onkyc_reason:data:${telegramId}` }],
+    [{ text: '✂️ Документ обрезан', callback_data: `onkyc_reason:crop:${telegramId}` }],
+    [{ text: '🤳 Проблема с селфи', callback_data: `onkyc_reason:selfie:${telegramId}` }],
+    [{ text: '✏️ Другая причина', callback_data: `onkyc_reason:other:${telegramId}` }],
+  ]);
+}
+
+async function rejectOnboardingKyc(bot, chatId, fromId, displayName, telegramId, reason) {
+  if (!hasStaffAccess(fromId)) throw new Error('Нет доступа');
+  const reviewer = buildActor(fromId, displayName || '');
+  const record = reviewOnboardingKyc(telegramId, 'rejected', reviewer, reason);
+  pending.onboardingKycReject.delete(chatId);
+  await bot.sendMessage(
+    chatId,
+    `❌ KYC до телефона отклонён — TG <code>${record.telegramId}</code>`,
+  );
+  await notifyOnboardingKycResult(record, false);
+  return record;
+}
+
+async function approveOnboardingKyc(bot, chatId, fromId, displayName, telegramId) {
+  if (!hasStaffAccess(fromId)) throw new Error('Нет доступа');
+  const reviewer = buildActor(fromId, displayName || '');
+  const record = reviewOnboardingKyc(telegramId, 'approved', reviewer);
+  const session = getSession(record.telegramId);
+  if (session?.phone && isPhoneAllowed(session.phone)) {
+    applyApprovedKyc(session.phone, record);
+    linkOnboardingKyc(record.telegramId, session.phone);
+  }
+  await bot.sendMessage(
+    chatId,
+    `✅ KYC до телефона подтверждён — TG <code>${record.telegramId}</code>`,
+  );
+  await notifyOnboardingKycResult(record, true);
+  return record;
+}
+
 function extractFileId(msg) {
   if (msg.photo?.length) return msg.photo[msg.photo.length - 1].file_id;
   if (msg.document?.mime_type?.startsWith('image/')) return msg.document.file_id;
@@ -695,6 +739,21 @@ async function handlePendingText(bot, msg) {
       await rejectKyc(bot, chatId, fromId, msg.from.first_name, phone, text);
     } catch (e) {
       pending.kycReject.delete(chatId);
+      await bot.sendMessage(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (pending.onboardingKycReject.has(chatId)) {
+    const { telegramId } = pending.onboardingKycReject.get(chatId);
+    if (text.length < 3 || text.length > 300) {
+      await bot.sendMessage(chatId, 'Причина должна содержать от 3 до 300 символов.');
+      return true;
+    }
+    try {
+      await rejectOnboardingKyc(bot, chatId, fromId, msg.from.first_name, telegramId, text);
+    } catch (e) {
+      pending.onboardingKycReject.delete(chatId);
       await bot.sendMessage(chatId, `❌ ${e.message}`);
     }
     return true;
@@ -1665,6 +1724,59 @@ async function handleCallback(bot, query) {
       if (!reason) throw new Error('Причина не найдена');
       await bot.answerCallbackQuery(query.id, 'Отклонено');
       await rejectKyc(bot, chatId, fromId, query.from?.first_name, phone, reason);
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('onkyc_ok:')) {
+    const telegramId = Number(data.slice(9));
+    try {
+      await approveOnboardingKyc(bot, chatId, fromId, query.from?.first_name, telegramId);
+      await bot.answerCallbackQuery(query.id, 'Принято');
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] }).catch(() => {});
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('onkyc_rej:')) {
+    const telegramId = Number(data.slice(9));
+    try {
+      if (!hasStaffAccess(fromId)) throw new Error('Нет доступа');
+      const record = getOnboardingKyc(telegramId);
+      if (!record || record.kycStatus !== 'pending') throw new Error('KYC уже обработан');
+      await bot.answerCallbackQuery(query.id);
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] }).catch(() => {});
+      await bot.sendMessage(
+        chatId,
+        `Почему отклонён KYC до телефона TG <code>${telegramId}</code>?`,
+        onboardingKycRejectionKeyboard(telegramId),
+      );
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('onkyc_reason:')) {
+    const [reasonCode, telegramIdRaw] = data.slice(13).split(':');
+    const telegramId = Number(telegramIdRaw);
+    try {
+      if (!hasStaffAccess(fromId)) throw new Error('Нет доступа');
+      await bot.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] }).catch(() => {});
+      if (reasonCode === 'other') {
+        pending.onboardingKycReject.set(chatId, { telegramId });
+        await bot.answerCallbackQuery(query.id);
+        await bot.sendMessage(chatId, 'Введите причину отказа (3–300 символов):\n/cancel — отмена');
+        return;
+      }
+      const reason = KYC_REJECTION_REASONS[reasonCode];
+      if (!reason) throw new Error('Причина не найдена');
+      await bot.answerCallbackQuery(query.id, 'Отклонено');
+      await rejectOnboardingKyc(bot, chatId, fromId, query.from?.first_name, telegramId, reason);
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }
