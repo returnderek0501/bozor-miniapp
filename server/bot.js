@@ -37,7 +37,7 @@ import {
   ignoreTagReminder, snoozeTagReminder, startTagReminderScheduler,
 } from './tagReminders.js';
 import {
-  getOnboardingKyc, reviewOnboardingKyc, linkOnboardingKyc,
+  getOnboardingKyc, reviewOnboardingKyc, tryLinkApprovedOnboardingToSession,
 } from './onboardingKyc.js';
 
 function normalizeCmd(text) {
@@ -543,17 +543,14 @@ async function approveOnboardingKyc(bot, chatId, fromId, displayName, telegramId
   if (!hasStaffAccess(fromId)) throw new Error('Нет доступа');
   const reviewer = buildActor(fromId, displayName || '');
   const record = reviewOnboardingKyc(telegramId, 'approved', reviewer);
-  const session = getSession(record.telegramId);
-  if (session?.phone && isPhoneAllowed(session.phone)) {
-    applyApprovedKyc(session.phone, record);
-    linkOnboardingKyc(record.telegramId, session.phone);
-  }
+  tryLinkApprovedOnboardingToSession(record.telegramId);
+  const fresh = getOnboardingKyc(telegramId) || record;
   await bot.sendMessage(
     chatId,
-    `✅ KYC до телефона подтверждён — TG <code>${record.telegramId}</code>`,
+    `✅ KYC до телефона подтверждён — TG <code>${fresh.telegramId}</code>`,
   );
-  await notifyOnboardingKycResult(record, true);
-  return record;
+  await notifyOnboardingKycResult(fresh, true);
+  return fresh;
 }
 
 function extractFileId(msg) {

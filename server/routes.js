@@ -55,7 +55,7 @@ import {
   getOnboardingKyc, onboardingKycStatus, submitOnboardingKyc,
   listPendingOnboardingKyc, listApprovedUnlinkedOnboardingKyc, reviewOnboardingKyc,
   linkOnboardingKyc, onboardingKycStats, reconcileOnboardingFromAttachments,
-  assignOnboardingPhone,
+  assignOnboardingPhone, tryLinkApprovedOnboardingToSession,
 } from './onboardingKyc.js';
 import { getDataDir } from './dataPath.js';
 
@@ -728,6 +728,17 @@ export function createApiRouter(botToken) {
     }
   });
 
+  router.get('/staff/onboarding-kyc/:telegramId', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const record = getOnboardingKyc(req.params.telegramId);
+    if (!record) return res.status(404).json({ success: false, error: 'KYC_NOT_FOUND' });
+    return res.json({
+      success: true,
+      request: onboardingKycSummary(record),
+    });
+  });
+
   router.get('/staff/onboarding-kyc/:telegramId/documents/:documentType', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
@@ -758,22 +769,26 @@ export function createApiRouter(botToken) {
     }
     try {
       const record = reviewOnboardingKyc(req.params.telegramId, decision, staff.actor, reason);
-      const session = getSession(record.telegramId);
-      if (decision === 'approved' && session?.phone && isPhoneAllowed(session.phone)) {
-        applyApprovedKyc(session.phone, record);
-        linkOnboardingKyc(record.telegramId, session.phone);
+      let linkedRecord = record;
+      if (decision === 'approved') {
+        const linkResult = tryLinkApprovedOnboardingToSession(record.telegramId);
+        linkedRecord = linkResult.record || record;
       }
-      await notifyOnboardingKycResult(record, decision === 'approved');
+      await notifyOnboardingKycResult(linkedRecord, decision === 'approved');
       return res.json({
         success: true,
-        request: onboardingKycSummary(record),
-        client: decision === 'approved' && !record.linkedPhone
-          ? staffOnboardingClientSummary(record)
+        request: onboardingKycSummary(linkedRecord),
+        client: decision === 'approved' && !linkedRecord.linkedPhone
+          ? staffOnboardingClientSummary(linkedRecord)
           : null,
       });
     } catch (error) {
-      const code = error.message === 'KYC_NOT_PENDING' ? 'KYC_NOT_PENDING' : 'KYC_REVIEW_FAILED';
-      return res.status(code === 'KYC_NOT_PENDING' ? 409 : 400)
+      const code = error.message === 'KYC_NOT_PENDING'
+        ? 'KYC_NOT_PENDING'
+        : error.message === 'KYC_NOT_FOUND'
+          ? 'KYC_NOT_FOUND'
+          : 'KYC_REVIEW_FAILED';
+      return res.status(code === 'KYC_NOT_PENDING' || code === 'KYC_NOT_FOUND' ? 409 : 400)
         .json({ success: false, error: code });
     }
   });

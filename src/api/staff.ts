@@ -183,6 +183,12 @@ export function reviewOnboardingKyc(
   });
 }
 
+export function fetchOnboardingKycRequest(
+  telegramId: number,
+): Promise<{ success: boolean; request: StaffOnboardingKyc }> {
+  return jsonRequest(`/api/staff/onboarding-kyc/${telegramId}`);
+}
+
 export function assignOnboardingPhone(
   telegramId: number,
   phone: string,

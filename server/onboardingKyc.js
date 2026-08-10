@@ -3,6 +3,7 @@ import { join } from 'path';
 import { getDataDir, readJson, updateJsonSync } from './dataPath.js';
 import {
   addPhone, applyApprovedKyc, setSession, updateEmployeeFields,
+  getSession, isPhoneAllowed,
 } from './store.js';
 
 const EMPTY = { records: {}, updatedAt: null };
@@ -181,7 +182,8 @@ export function submitOnboardingKyc(tgUser, documents) {
       kycReviewedBy: null,
       kycReviewedByName: '',
       kycRejectionReason: '',
-      linkedPhone: current?.linkedPhone || '',
+      // Always start a new review cycle without a stale phone link.
+      linkedPhone: '',
       recoveredFromAttachments: false,
       updatedAt: now,
     };
@@ -228,13 +230,31 @@ export function reviewOnboardingKyc(telegramId, decision, reviewer = null, reaso
   mutate((data) => {
     const recordKey = key(telegramId);
     record = data.records[recordKey];
-    if (!record || record.kycStatus !== 'pending') throw new Error('KYC_NOT_PENDING');
+    if (!record) throw new Error('KYC_NOT_FOUND');
+    // Idempotent: repeated approve/reject after a partial UI failure must succeed.
+    if (record.kycStatus === decision) {
+      if (decision === 'rejected') {
+        const nextReason = String(reason || '').trim();
+        if (nextReason && nextReason !== record.kycRejectionReason) {
+          record.kycRejectionReason = nextReason;
+          record.updatedAt = new Date().toISOString();
+          data.records[recordKey] = record;
+        }
+      }
+      return;
+    }
+    const canRestate = !record.linkedPhone
+      && (record.kycStatus === 'pending'
+        || record.kycStatus === 'approved'
+        || record.kycStatus === 'rejected');
+    if (!canRestate) throw new Error('KYC_NOT_PENDING');
     const now = new Date().toISOString();
     record.kycStatus = decision;
     record.kycReviewedAt = now;
     record.kycReviewedBy = reviewer?.id ?? null;
     record.kycReviewedByName = reviewer?.deskOperatorName || reviewer?.name || reviewer?.operatorName || '';
     record.kycRejectionReason = decision === 'rejected' ? String(reason || '').trim() : '';
+    if (decision === 'rejected') record.linkedPhone = '';
     record.updatedAt = now;
     data.records[recordKey] = record;
   });
@@ -254,6 +274,32 @@ export function linkOnboardingKyc(telegramId, phone) {
     data.records[key(telegramId)] = record;
   });
   return record;
+}
+
+/** Best-effort phone bind after approval; never throws away the KYC decision. */
+export function tryLinkApprovedOnboardingToSession(telegramId) {
+  const record = getOnboardingKyc(telegramId);
+  if (!record || record.kycStatus !== 'approved') {
+    return { linked: false, record, error: 'KYC_NOT_APPROVED' };
+  }
+  if (record.linkedPhone) {
+    return { linked: true, record, phone: record.linkedPhone };
+  }
+  const session = getSession(telegramId);
+  if (!session?.phone || !isPhoneAllowed(session.phone)) {
+    return { linked: false, record };
+  }
+  try {
+    applyApprovedKyc(session.phone, record);
+    const linked = linkOnboardingKyc(telegramId, session.phone);
+    return { linked: true, record: linked, phone: session.phone };
+  } catch (error) {
+    console.error(
+      `Onboarding KYC post-approve link failed for ${telegramId}:`,
+      error.message,
+    );
+    return { linked: false, record: getOnboardingKyc(telegramId), error: error.message };
+  }
 }
 
 /**

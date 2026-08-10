@@ -567,6 +567,18 @@ export function setKycStatus(rawPhone, status, reviewer = null, reason = '') {
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  if (emp.kycStatus === status) {
+    if (status === 'rejected') {
+      const nextReason = String(reason || '').trim();
+      if (nextReason && nextReason !== emp.kycRejectionReason) {
+        emp.kycRejectionReason = nextReason;
+        emp.updatedAt = new Date().toISOString();
+        all[phone] = emp;
+        writeEmployees(all);
+      }
+    }
+    return emp;
+  }
   if (emp.kycStatus !== 'pending') throw new Error('KYC_NOT_PENDING');
 
   const now = new Date().toISOString();

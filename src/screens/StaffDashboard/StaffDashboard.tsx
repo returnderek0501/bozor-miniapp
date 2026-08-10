@@ -1,8 +1,9 @@
 import {
-  useCallback, useEffect, useMemo, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
   assignClientTag, fetchKycDocument, fetchOnboardingKycDocument,
+  fetchOnboardingKycRequest,
   fetchStaffDashboard, fetchStaffTags, removeClientTag, reviewKyc,
   reviewOnboardingKyc, assignOnboardingPhone, selectDeskOperator,
   type StaffClient, type StaffDashboardData, type StaffOnboardingKyc, type StaffTag,
@@ -75,6 +76,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [activitySince, setActivitySince] = useState<number | null>(null);
   const [provisionalPhone, setProvisionalPhone] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
+  const reviewLock = useRef(false);
 
   const selectedProvisional = useMemo(() => {
     if (!selectedClientId || !data) return null;
@@ -278,7 +280,8 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
     setLoadingDocuments(`tg_${request.telegramId}`);
     setError('');
     try {
-      const [front, back, selfie] = await Promise.all([
+      const [{ request: fresh }, front, back, selfie] = await Promise.all([
+        fetchOnboardingKycRequest(request.telegramId),
         fetchOnboardingKycDocument(request.telegramId, 'idCardFront'),
         fetchOnboardingKycDocument(request.telegramId, 'idCardBack'),
         fetchOnboardingKycDocument(request.telegramId, 'selfie'),
@@ -288,7 +291,15 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
         idCardBack: URL.createObjectURL(back),
         selfie: URL.createObjectURL(selfie),
       });
-      setOnboardingDocument(request);
+      setOnboardingDocument(fresh);
+      if (fresh.kycStatus !== 'pending') {
+        setNotice(
+          fresh.kycStatus === 'approved'
+            ? 'Эта заявка уже подтверждена. Можно указать телефон во вкладке «Клиенты».'
+            : 'Эта заявка уже отклонена.',
+        );
+        await refresh();
+      }
     } catch {
       setError('Не удалось открыть документы KYC до телефона.');
     } finally {
@@ -298,7 +309,10 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
 
   const submitReview = async (decision: 'approved' | 'rejected') => {
     if (!documentClient && !onboardingDocument) return;
+    if (reviewLock.current || reviewing) return;
+    reviewLock.current = true;
     setReviewing(true);
+    setError('');
     try {
       if (onboardingDocument) {
         await reviewOnboardingKyc(
@@ -312,9 +326,18 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
       closeDocuments();
       await refresh();
-    } catch {
-      setError('Заявка уже обработана или произошла ошибка.');
+      setNotice(decision === 'approved' ? 'KYC подтверждён.' : 'KYC отклонён.');
+    } catch (requestError) {
+      const code = requestError instanceof Error ? requestError.message : '';
+      if (code === 'KYC_NOT_PENDING') {
+        setError('Заявка уже обработана. Обновите список.');
+        closeDocuments();
+        await refresh();
+      } else {
+        setError('Не удалось сохранить решение. Повторите попытку.');
+      }
     } finally {
+      reviewLock.current = false;
       setReviewing(false);
     }
   };
