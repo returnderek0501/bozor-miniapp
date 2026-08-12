@@ -1,467 +1,657 @@
-# ТЗ / Master Prompt: Uztronix Holding — Telegram Mini App + CRM
+# MASTER PROMPT / ТЗ: Telegram Mini App + Staff CRM + KYC
 
-Скопируй этот документ целиком как единый промпт агенту/разработчику. Цель: **с нуля воспроизвести функционально эквивалентный проект** (не «похожее приложение», а тот же продукт: стек, потоки, модели, API, UI, деплой).
-
----
-
-## 0. Роль и результат
-
-Ты — senior full-stack инженер. Создай production-ready монорепо:
-
-**Название пакета:** `uztronix-miniapp`  
-**Бренд:** Uztronix (Uztronix Holding)  
-**Продукт:** Telegram Mini App «личный кабинет сотрудника» + внутренний CRM (Telegram-бот кнопками + веб Staff Dashboard + браузерная админ-панель).
-
-Один Node-процесс обслуживает:
-1. Express API (`/api/*`)
-2. Статику собранного React SPA (`dist`)
-3. Telegram-бота (long polling)
-4. Фоновые задачи (Google Sheets / Excel sync, tag reminders)
-
-Данные — **JSON-файлы на диске** (без SQL/Redis). Persist через Railway Volume `/main`.
+> Скопируй этот документ **целиком** как единый промпт агенту.  
+> Цель: с нуля собрать **рабочий** продукт, а не каркас с пустой админкой.  
+> Бренд, название, цвета и логотипы — **плейсхолдеры**. Задаёшь ты. Агент не хардкодит чужой бренд.
 
 ---
 
-## 1. Продуктовая суть
+## 0. Плейсхолдеры (заполни перед запуском)
 
-### Для клиента (сотрудник / лид в Telegram)
-1. Открывает Mini App из бота.
-2. **Сначала KYC** (до телефона): 3 фото — лицевая ID-карты, обратная ID-карты, селфи с ID в руках.
-3. Ждёт одобрения оператора/админа.
-4. После approve вводит телефон `+998` + 9 цифр.
-5. Телефон должен быть в whitelist (`phones.json`) **или** логика допуска через одобренный KYC/профиль — кабинет открывается только при успешной верификации.
-6. В кабинете: приветствие, ФИО, ID сотрудника, должность (всегда `Agent`), возраст, семейное положение, телефон (маскированный), баланс аванса, вывод на карту (только whitelist карт), повторная подача KYC на `/documents` если нужно.
-7. Отказ в доступе маскируется UX-текстом «старые SIM не поддерживаются» (даже при отсутствии в whitelist) — продуктовая обфускация.
+```
+{{PROJECT_NAME}}          — название продукта (пример: Acme Holding)
+{{PACKAGE_NAME}}          — npm name (пример: acme-miniapp)
+{{DEFAULT_LANG}}          — uz | ru | en (по умолчанию uz)
+{{SECONDARY_LANG}}        — второй язык UI клиента
+{{BRAND_PRIMARY}}         — основной цвет (#hex)
+{{BRAND_PRIMARY_DARK}}    — тёмный вариант
+{{BRAND_ACCENT}}          — акцент (#hex)
+{{BRAND_SOFT}}            — мягкий фон primary
+{{ACCENT_SOFT}}           — мягкий фон accent
+{{PANEL_SECRET}}          — цифровой код веб-панели (4–32 цифр), пример 742951
+{{BROWSER_ADMIN_PATH}}    — секретный путь браузерной админки, пример /ops-xxxx-x7m2
+{{PHONE_COUNTRY_CODE}}    — код страны без +, пример 998
+{{PHONE_LOCAL_LENGTH}}    — длина локальной части, пример 9
+{{CURRENCY_LABEL}}        — подпись валюты (so'm / сум / UZS)
+{{BUILTIN_ADMIN_IDS}}     — массив Telegram ID админов, вшитых в код
+{{WEBAPP_MENU_LABEL}}     — текст menu button Mini App
+{{TZ_BUSINESS}}           — таймзона для «сегодня»/статистики (Europe/Moscow)
+```
 
-### Для оператора / админа
-- **Telegram-панель** (`/panel`, `/operator`, `/admin`) — button-first CRM.
-- **Web Staff Dashboard** внутри Mini App: после проверки Telegram ID (оператор/админ) + секретный код `742951`.
-- **Browser admin** по секретному пути `/ops-uztronix-x7m2`: только админы, Telegram ID + тот же код, HMAC cookie-сессия.
-
-Правило CRM: **кто внёс — тот и ведёт клиента**. Оператор видит только своих клиентов (по имени desk-оператора). Админ видит всех.
+Правило: **везде**, где в UI нужна надпись бренда — `{{PROJECT_NAME}}`.  
+Дизайн-токены — CSS variables из плейсхолдеров. Не копировать чужие логотипы.
 
 ---
 
-## 2. Стек (строго)
+## 1. Почему типичный агент ломает продукт (читай первым)
+
+Если эти пункты не реализованы — получится «хуйня как на скрине»: пустая/убогая админка, KYC «не приходит».
+
+### 1.1. KYC — это ДВЕ независимые очереди
+| Очередь | Когда | Ключ хранения | Где видит staff |
+|--------|-------|---------------|-----------------|
+| **Onboarding KYC** | ДО ввода телефона | `kyc_onboarding.json` + `attachments/tg_{telegramId}/` | вкладка KYC, блок «до телефона» |
+| **Employee KYC** | ПОСЛЕ телефона/сессии | `employees.json` + `attachments/{clientId}/` | вкладка KYC, блок «Employee KYC» |
+
+Агент, который сделал «одну KYC-таблицу», ломает весь вход.
+
+### 1.2. «KYC не приходит» — чеклист обязательных сайд-эффектов
+При `POST /api/onboarding/kyc/submit` сервер **обязан атомарно**:
+1. Провалидировать 3 картинки (magic bytes, размер).
+2. Сохранить файлы на диск в `attachments/tg_{id}/`.
+3. Записать/обновить запись в `kyc_onboarding.json` со статусом `pending`.
+4. **Отправить Telegram-уведомление ВСЕМ админам + ВСЕМ операторам** (текст + inline кнопки + 3 фото).
+5. Вернуть клиенту `{ success: true, kycStatus: "pending" }`.
+
+При открытии Staff Dashboard:
+1. `reconcileOnboardingFromAttachments()` — восстановить заявки из папок, если JSON потерялся.
+2. `GET /api/staff/dashboard` возвращает массив `onboardingKyc` (pending).
+3. Фронт **показывает отдельный блок** этих заявок (не только employee KYC).
+4. Poll каждые **20 секунд** обновляет dashboard (silent).
+5. Badge на табе KYC = `pendingOnboarding.length + pendingEmployeeKyc.length`.
+
+Если пропущен пункт 4 (notify) или пункт 2–3 (отдельный массив в dashboard) — «KYC не приходит».
+
+### 1.3. Админка — полноценный продукт, не 3 кнопки
+Staff Dashboard = отдельное приложение внутри SPA:
+- шапка, desk-имя, 5 stat-карточек, 3 таба, модалки документов, сетка клиентов с фильтрами, tools.
+- Browser mode шире (1280px), Mini App — 980px.
+- Empty states, loading, error, notice, 401→logout.
+- Просмотр документов: fetch blob → object URL → 3 картинки в модалке (не голые текстовые ссылки как единственный UX; ссылки допустимы как fallback, но **основной** путь — modal preview).
+
+### 1.4. Два входа staff
+| Режим | Как | Auth |
+|-------|-----|------|
+| Mini App staff | Telegram WebApp, Telegram ID ∈ operators∪admins, код `{{PANEL_SECRET}}` | `Authorization: tma <initData>` + in-memory unlock 12h |
+| Browser admin | URL `{{BROWSER_ADMIN_PATH}}`, **только admin**, Telegram ID + код | HMAC cookie, `credentials: 'include'` |
+
+Клиентский поток при browser path **не запускается**.
+
+---
+
+## 2. Продукт одной фразой
+
+Telegram Mini App «личный кабинет» + JSON CRM + Telegram-бот (кнопки) + веб Staff Dashboard.  
+Клиент проходит **KYC до телефона**, после approve вводит номер, видит кабинет (баланс/профиль/вывод).  
+Операторы/админы ведут клиентов тегами, сообщениями, рассылками; проверяют KYC в боте и в вебе.
+
+---
+
+## 3. Стек (фиксированный)
 
 | Слой | Технологии |
 |------|------------|
-| Frontend | React 19, TypeScript, Vite 8, React Router 7 |
-| i18n | i18next + react-i18next + i18next-browser-languagedetector; языки `uz` (default) и `ru` |
-| Backend | Node.js ≥20, Express 4, ESM (`"type": "module"`) |
-| Persistence | JSON files + atomic write (tmp+rename) + `.bak` recovery |
-| Telegram | Bot API long poll; WebApp `initData` HMAC validation |
-| Export | `xlsx`; Google Sheets via `googleapis` (optional) |
-| Deploy | Railway (`railway.toml`), healthcheck `GET /api/health` |
-| Lint/test | ESLint + typescript-eslint; `node --test server/*.test.js` |
-| CSS | Кастомный CSS, без Tailwind/MUI |
+| Frontend | React 19 + TypeScript + Vite 8 + React Router 7 |
+| i18n клиента | i18next, `{{DEFAULT_LANG}}` + `{{SECONDARY_LANG}}` |
+| Backend | Node ≥20, Express 4, ESM |
+| Store | JSON на диске, atomic write (tmp+rename), `.bak` |
+| Bot | Telegram Bot API, **long polling** (не webhook) |
+| Auth client | WebApp `initData` HMAC-SHA-256, max age 24h |
+| Export | `xlsx` + optional Google Sheets (`googleapis`) |
+| Deploy | Railway: build `npm i && npm run build`, start `node server.js`, health `/api/health`, volume `/main` |
+| CSS | свой CSS + CSS variables (без Tailwind/MUI, если не попросили иное) |
+| Tests | `node --test server/*.test.js` |
 
-Зависимости (ориентир `package.json`):
-```
-express, googleapis, i18next, i18next-browser-languagedetector,
-react, react-dom, react-i18next, react-router-dom, xlsx
-dev: vite, @vitejs/plugin-react, typescript, eslint, typescript-eslint, @types/*
-```
+Один процесс: API + static `dist` + bot + фоновые задачи.
 
-Скрипты:
+---
+
+## 4. Архитектура файлов
+
 ```
-dev: vite
-build: tsc -b && vite build
-start: node server.js
-test: node --test server/*.test.js
-lint: eslint .
-preview: vite preview
+server.js
+server/
+  routes.js              # ВСЕ /api
+  bot.js                 # CRM кнопки + KYC callbacks
+  store.js               # phones/sessions/employees
+  dataPath.js            # DATA_DIR, readJson/writeJson
+  onboardingKyc.js       # pre-phone KYC store + reconcile
+  kyc.js                 # notify + labels + review helpers
+  attachments.js         # save/validate images
+  tags.js, operators.js, admins.js, permissions.js
+  panelAccess.js         # {{PANEL_SECRET}}, attempts, TTL
+  browserAuth.js         # cookie session + path
+  clientAuth.js          # initData parse/verify
+  deskOperators.js
+  broadcasts.js, stats.js, export.js, sheets.js, exportData.js
+  tagReminders.js, staffMessaging.js, staffDto.js
+  clientIds.js, clientFields.js, telegram.js, botStatus.js
+src/
+  App.tsx                # state machine
+  api/client.ts, api/staff.ts
+  screens/AuthGate/      # KYC onboarding + phone
+  screens/CabinetScreen/, DocumentsScreen/, AccessDenied/
+  screens/StaffGate/, StaffDashboard/  # КРИТИЧНО: полноценный UI
+  components/...
+  i18n/locales/
+public/ logos + favicon (нейтральные или из {{PROJECT_NAME}})
+data/.gitkeep
 ```
 
 ---
 
-## 3. Структура репозитория
+## 5. Env
 
-```
-/
-├── package.json, package-lock.json
-├── README.md
-├── docs/OPERATOR_GUIDE.md
-├── .env.example
-├── railway.toml
-├── eslint.config.js
-├── index.html
-├── vite.config.ts, tsconfig*.json
-├── server.js                 # entry: API + static + bot
-├── data/.gitkeep             # runtime data (gitignore json/attachments)
-├── public/
-│   ├── favicon.svg           # UZ, blue/orange
-│   ├── logo-light.svg
-│   ├── logo-dark.svg
-│   └── logo-header.svg
-├── server/
-│   ├── routes.js             # все HTTP API
-│   ├── bot.js                # Telegram CRM UI (~button flows)
-│   ├── store.js              # phones/sessions/employees
-│   ├── dataPath.js           # DATA_DIR, atomic JSON I/O
-│   ├── onboardingKyc.js      # pre-phone KYC
-│   ├── kyc.js                # post-login KYC helpers
-│   ├── attachments.js        # image save/validate
-│   ├── tags.js, operators.js, admins.js, permissions.js
-│   ├── panelAccess.js        # secret 742951, unlock TTL
-│   ├── browserAuth.js        # browser admin cookie
-│   ├── clientAuth.js         # initData + sessions
-│   ├── deskOperators.js      # shared Telegram desk names
-│   ├── broadcasts.js, stats.js, export.js, sheets.js, exportData.js
-│   ├── tagReminders.js, staffMessaging.js, staffDto.js
-│   ├── clientIds.js, clientFields.js, pending.js, telegram.js, botStatus.js
-│   └── *.test.js
-└── src/
-    ├── main.tsx, App.tsx, index.css, browserAdmin.ts
-    ├── telegram.d.ts, vite-env.d.ts
-    ├── api/client.ts, api/staff.ts
-    ├── i18n/index.ts, locales/uz.json, locales/ru.json
-    ├── hooks/useTheme.ts
-    ├── components/
-    │   ├── Header/, BottomNav/, Logo/, ThemeToggle/, WithdrawModal/
-    └── screens/
-        ├── AuthGate/ (AuthGate, KycOnboardingGate, KycPendingGate)
-        ├── AccessDenied/
-        ├── CabinetScreen/
-        ├── DocumentsScreen/ (+ kycImage.ts compression)
-        ├── StaffGate/ (StaffGate, BrowserStaffGate)
-        └── StaffDashboard/ (StaffDashboard, StaffClientGrid, StaffTools)
-```
-
----
-
-## 4. Переменные окружения
-
-`.env.example`:
 ```
 BOT_TOKEN=
-EXPECTED_BOT_USERNAME=          # без @; если getMe не совпал — бот НЕ стартует polling
-ADMIN_IDS=123456789             # comma-separated
-WEBAPP_URL=https://your-app.up.railway.app
-DATA_DIR=/main
+EXPECTED_BOT_USERNAME=          # без @; mismatch → НЕ стартовать polling
+ADMIN_IDS=                      # comma-separated
+WEBAPP_URL=
+DATA_DIR=/main                  # иначе /main если есть, иначе ./data
 PORT=3000
-BROWSER_ADMIN_PATH=/ops-uztronix-x7m2
-BROWSER_SESSION_SECRET=change-me-long-random-string
+BROWSER_ADMIN_PATH={{BROWSER_ADMIN_PATH}}
+BROWSER_SESSION_SECRET=
 GOOGLE_SHEETS_ID=
-GOOGLE_SHEETS_TAB=Сотрудники    # legacy/unused в коде; вкладки хардкодятся
-GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+GOOGLE_SERVICE_ACCOUNT_JSON=
+ALLOW_DEMO_AUTH=                # optional
+VITE_BROWSER_ADMIN_PATH=        # sync с сервером
 ```
 
-Также в коде:
-- `ALLOW_DEMO_AUTH=true` + query `?demoId=` — demo auth для разработки
-- `VITE_BROWSER_ADMIN_PATH` — синхронизация секретного пути на фронте
-
-**Defaults:**
-- Data dir: `DATA_DIR` → иначе `/main` если существует → иначе `./data`
-- WEBAPP fallback URL (если не задан): можно захардкодить production URL placeholder
-- Built-in admin Telegram ID: `8889663205` (нельзя удалить через API/бот)
-- Panel secret: hardcoded `742951` в `panelAccess.js`
-- Browser path default: `/ops-uztronix-x7m2`
-
-`railway.toml`:
-```
-[build]
-buildCommand = "npm install && npm run build"
-[deploy]
-startCommand = "node server.js"
-restartPolicyType = "on_failure"
-healthcheckPath = "/api/health"
-healthcheckTimeout = 30
-```
-
-Volume mount: `/main`.
+`express.json({ limit: '15mb' })`. 413 → `{ error: 'PAYLOAD_TOO_LARGE' }`.
 
 ---
 
-## 5. Дизайн-система UI
+## 6. State machine клиента/staff (`App.tsx`) — обязательно
 
-### Цвета (CSS variables в `src/index.css`)
-```css
---brand-blue: #0066FF;
---brand-blue-dark: #0047B3;
---brand-blue-soft: #E8F1FF;
---brand-orange: #FF6600;
---brand-orange-soft: #FFF4EB;
---brand-gray: #8C9AAB;
---bg: #F5F7FA;
---surface: #FFFFFF;
---text: #1A2332;
---text-muted: #5C6B7A;
---border: #DDE3EA;
---error: #B42318;
---error-bg: #FEF3F2;
---radius: 10px;
---shadow: 0 1px 8px rgba(26, 35, 50, 0.06);
---font-sans: 'Inter', system-ui, sans-serif;
+```
+loading
+ ├─ pathname === BROWSER_ADMIN_PATH ?
+ │    ├─ cookie ok+unlocked → staff-ready
+ │    └─ else → browser-auth
+ └─ GET /api/staff/status
+      ├─ staff → unlocked? staff-ready : staff-auth
+      └─ resolveClientEntry():
+           GET /api/onboarding/kyc/status
+           ├─ pending  → kyc-pending
+           ├─ rejected → kyc (rejected=true)
+           ├─ none     → kyc
+           └─ approved → GET /api/auth/status
+                ├─ authorized+allowed → ready
+                └─ else → auth (phone)
 ```
 
-Dark theme `[data-theme="dark"]`:
-- `--bg: #0D0D0D`, `--surface: #1A1A1A`, `--primary: #4D94FF`, тёмные soft-цвета, balance card `#003080`
+Состояния UI:  
+`loading | browser-auth | staff-auth | staff-ready | kyc | kyc-pending | auth | denied | ready`
 
-**Brand strip:** горизонтальный градиент 50% blue-dark / 50% orange, высота 3px — на auth/staff gates.
+Routes только в `ready`:
+- `/` — кабинет
+- `/documents` — post-login KYC
+- browser path — режим, не client route
 
-### Типографика
-- Google Font **Inter** 400–700 (`index.html`)
-- `theme-color` meta: `#0047B3`
-- Title: `Uztronix — Shaxsiy kabinet`
-- Подключить `https://telegram.org/js/telegram-web-app.js`
-
-### Layout
-- Мобильный Mini App: Header + content + fixed BottomNav (safe-area)
-- Gates (KYC/Auth/Staff): логотип + brand-strip + центрированная карточка
-- Cabinet: синяя balance-card с оранжевой верхней границей; soft info rows
-- Staff Dashboard: русский UI, tabs, denser filters, modals; poll refresh ~20s
-- ThemeToggle + переключатель UZ/RU
-- Логотипы: light/dark/header SVG (сине-оранжевый бренд «UZ»/Uztronix)
-
-### Ключевые тексты (должны совпадать по смыслу)
-
-**UZ:**
-- tagline: «Xodimlar shaxsiy kabineti»
-- denial: «Eski SIM-kartalar qo'llab-quvvatlanmaydi.»
-- currency: «so'm»
-
-**RU:**
-- tagline: «Личный кабинет сотрудника»
-- denial: «Старые SIM-карты не поддерживаются.»
-- currency: «сум»
-- Staff: «Служебный вход» / «Панель управления»
-
-Полные словари — см. структуру ключей как в разделе 12 (i18n).
+На старте: `Telegram.WebApp.ready()` + `expand()`.
 
 ---
 
-## 6. Frontend: state machine (`App.tsx`)
+## 7. KYC — ПОЛНАЯ СПЕЦИФИКАЦИЯ (самое важное)
 
-Состояния:
-`loading | staff-auth | staff-ready | browser-auth | kyc | kyc-pending | auth | denied | ready`
+### 7.1. Документы
+Ровно 3 файла:
+1. `idCardFront` — лицевая сторона ID
+2. `idCardBack` — обратная
+3. `selfie` — селфи с документом
 
-### Порядок резолва при старте
-1. `Telegram.WebApp.ready()` + `expand()`
-2. Если URL = browser admin path → `browser-auth` / `staff-ready` по cookie session
-3. Иначе `GET /api/staff/status`:
-   - если staff → `staff-auth` или `staff-ready` (если unlocked)
-   - иначе client entry:
-     - onboarding KYC pending → `kyc-pending`
-     - not approved → `kyc` (с флагом rejected)
-     - approved → `GET /api/auth/status` → `ready` или `auth`
+Форматы: JPEG / PNG / WebP.  
+Клиент: resize max side ≤ 1800px, JPEG ≤ 3MB, source file ≤ 15MB.  
+Сервер: data-URL → buffer; magic bytes; 512B…3MB; иначе коды ошибок ниже.
 
-### Client routes (только state=`ready`)
-| Path | Screen |
-|------|--------|
-| `/` | CabinetScreen |
-| `/documents` | DocumentsScreen (post-login KYC) |
+### 7.2. Статусы
+`none | pending | approved | rejected`
 
-Browser admin path обрабатывается как режим, не как обычный client route.
+Переходы:
+- `none|rejected` → submit → `pending`
+- `pending` → staff approve → `approved`
+- `pending` → staff reject (reason 3–300) → `rejected`
+- Повторный submit при `pending|approved` запрещён (409)
 
-### Клиентские экраны — поведение
+### 7.3. Client API
 
-**KycOnboardingGate**
-- 3 upload-слота: front, back, selfie
-- Клиентская компрессия: max сторона ≤1800px, JPEG ≤~3MB (`kycImage.ts`)
-- Submit → `POST /api/onboarding/kyc/submit` (base64) → pending gate
-- При rejection — показать причину/флаг и разрешить ресабмит
-
-**KycPendingGate**
-- Текст ожидания + кнопка «Проверить статус»
-
-**AuthGate**
-- Prefixed `+998`, 9 digits
-- `POST /api/auth/verify`
-- Fail → AccessDenied с SIM-текстом или contactFailed
-
-**CabinetScreen**
-- Greeting + fullName + employeeId
-- Banner если `!withdrawAllowed` → ссылка на Documents
-- Balance card + Withdraw CTA (disabled без баланса/KYC)
-- Profile rows: position (`Agent`), age, maritalStatus, phone
-- Last withdrawal block если есть
-
-**WithdrawModal**
-- Card + optional amount (пусто = весь баланс)
-- Ошибки: unsupported card, invalid, insufficient
-
-**DocumentsScreen**
-- Статус KYC + upload/resubmit post-login (`/api/kyc/*`)
-
-**StaffGate / BrowserStaffGate**
-- Mini App: только код `742951`
-- Browser: Telegram ID + код
-- 5 попыток / 15 мин; unlock TTL 12 часов
-
-**StaffDashboard tabs**
-1. **KYC** — pending onboarding (pre-phone) + pending employee KYC; просмотр документов; approve/reject с preset reasons (reject reason 3–300 chars)
-2. **Клиенты** — searchable grid; admin filters (operator, KYC, tags, profile completeness, Telegram link, activity window); sort; tag matrix toggles; provisional approved-KYC without phone → assign phone
-3. **Действия / tools** — add client, today summary, tag catalog, edit client fields (name/age/marital/employeeId/balance), change operator, message client, broadcasts, pending approvals, operator stats (`hour|today|day|week|month|all`, Moscow TZ), Excel export, manage operators/admins
-
----
-
-## 7. Модели данных (JSON files в DATA_DIR)
-
-| File | Shape |
-|------|--------|
-| `phones.json` | `{ phones: string[], updatedAt }` |
-| `sessions.json` | `{ [telegramId]: { phone, verifiedAt, lastSeenAt, username, firstName, lastName } }` |
-| `employees.json` | `{ [phone]: Employee }` |
-| `client_counter.json` | `{ next: number }` → client IDs `"1","2",…` |
-| `tags.json` | `{ tags: Tag[], updatedAt }` |
-| `operators.json` | `{ operators: [{ id, name, telegramId }], updatedAt }` |
-| `admins.json` | `{ ids: number[], updatedAt }` |
-| `desk_sessions.json` | `{ [telegramId]: { activeName, recentNames[], updatedAt } }` |
-| `kyc_onboarding.json` | `{ records: { [telegramId]: OnboardingKyc }, updatedAt }` |
-| `broadcasts.json` | `{ items: Broadcast[] }` |
-| `tag_reminders.json` | `{ byPhone: {...}, updatedAt }` |
-| `attachments/<clientId|tg_*>/` | KYC & tag photos |
-| `uztronix_export.xlsx` | debounced local export |
-
-### Employee
-```js
+#### `GET /api/onboarding/kyc/status`
+Auth: TMA обязателен. 401 `{ error: 'INVALID_INIT_DATA' }`  
+200:
+```json
 {
-  phone, clientId, fullName,
-  position: 'Agent', // FIXED always
-  age, maritalStatus, employeeId,
-  advanceBalance: 0,
-  operator, operatorId,
-  tags: [{ id, label, assignedAt, assignedBy, assignedByName, note?, photo? }],
-  tagHistory: [...],
-  allowedCards: string[], // digits only
-  createdAt, createdBy, createdByName,
-  kycStatus: 'none'|'pending'|'approved'|'rejected',
-  kycSubmittedAt, kycReviewedAt, kycReviewedBy, kycReviewedByName,
-  kycRejectionReason,
-  kycDocuments: { idCardFront, idCardBack, selfie }, // file refs
-  updatedAt,
-  lastWithdrawal?: { amount, card, at }
+  "kycStatus": "none|pending|approved|rejected",
+  "kycCanSubmit": true,
+  "kycRejectionReason": "",
+  "submittedAt": null,
+  "phoneVerified": false
 }
 ```
 
-### Onboarding KYC
-- Telegram profile snapshot
-- `provisionalId`: `tg_<telegramId>`
-- docs + status + optional `linkedPhone`
-- На старте: reconcile missing records from `attachments/tg_*` folders (не оживлять rejected из файлов)
+#### `POST /api/onboarding/kyc/submit`
+```json
+{
+  "idCardFront": "data:image/jpeg;base64,...",
+  "idCardBack": "data:image/jpeg;base64,...",
+  "selfie": "data:image/jpeg;base64,..."
+}
+```
+200 `{ "success": true, "kycStatus": "pending" }`  
+409 `KYC_PENDING` | `KYC_ALREADY_APPROVED`  
+400 `KYC_DOCUMENTS_REQUIRED` | `INVALID_IMAGE` | `IMAGE_TOO_SMALL` | `IMAGE_TOO_LARGE` | `KYC_SUBMIT_FAILED`
 
-### Tags (defaults, GLOBAL_TAG_COUNT = 3)
-1. `pasport` — «Паспорт получен» — «Клиент прислал фото паспорта»
-2. `dogovor` — «Договор подписан» — «Клиент подписал договор»
-3. `v_rabote` — «В работе» — «Клиент в активной работе»
+**После успеха сервер вызывает `notifyOnboardingKycReview(record)`.**
 
-Дальнейшие теги: `scope: 'global'|'operator'` (operator-scoped видны владельцу; admin видит все).
+### 7.4. Уведомление staff в Telegram (обязательно)
 
-### Public client DTO
-Masked phone, profile fields, KYC flags, `withdrawAllowed` (KYC approved + etc.).
+Targets = `listAdmins() ∪ listOperators().telegramId` (уникальные, >0).
 
-### Phone normalization
-- Client login: strict `+998` + exactly 9 local digits
-- Operator add: looser `normalizePhoneForOperator` — любой `+998…` с локальной частью
+Сообщение (HTML):
+```
+<b>🪪 KYC до ввода телефона</b>
+Telegram: <b>{firstName lastName}</b>
+Username: @{username} | —
+Telegram ID: <code>{id}</code>
 
-### Card normalization
-Digits only, length 12–19.
+Проверьте документы ниже или откройте служебную панель.
+```
+
+Inline keyboard:
+```
+[ ✅ Принять | callback_data: onkyc_ok:{telegramId} ]
+[ ❌ Отклонить | callback_data: onkyc_rej:{telegramId} ]
+```
+
+Затем 3 фото с captions:
+- `📄 ID-карта (лицевая сторона)`
+- `📄 ID-карта (обратная сторона)`
+- `🤳 Селфи с ID-картой`
+
+Ошибки send ловятся per-chat, не валят submit.
+
+### 7.5. Результат клиенту в Telegram
+Approve:
+```
+✅ <b>KYC подтверждён</b>
+
+Теперь вернитесь в Mini App и укажите номер телефона.
+```
+Reject:
+```
+❌ <b>KYC отклонён</b>
+
+{reason || «Загрузите документы повторно.»}
+```
+
+### 7.6. Staff API для onboarding
+
+#### В dashboard
+`GET /api/staff/dashboard` включает:
+```json
+{
+  "onboardingKyc": [
+    {
+      "telegramId": 8889663205,
+      "telegramUsername": "user",
+      "telegramDisplayName": "Name",
+      "kycStatus": "pending",
+      "kycSubmittedAt": "ISO",
+      "kycRejectionReason": "",
+      "provisionalId": "tg_8889663205"
+    }
+  ],
+  "stats": {
+    "onboardingPending": 1,
+    "pendingKyc": 0,
+    "approvedKyc": 0,
+    "provisionalClients": 0,
+    "recoveredOnboarding": 0,
+    "clients": 0,
+    "incomplete": 0
+  }
+}
+```
+
+**Критично:** pending onboarding НЕ зависит от desk-имени оператора. Операторы видят очередь onboarding всегда. Список `clients` у оператора без desk — пустой, но KYC-очередь живая.
+
+#### Документы
+`GET /api/staff/onboarding-kyc/:telegramId/documents/:documentType`  
+`documentType` ∈ `idCardFront|idCardBack|selfie`  
+Ответ: `res.sendFile(absolutePath)` при валидной staff-сессии.  
+404 `DOCUMENT_NOT_FOUND`, 400 `INVALID_DOCUMENT_TYPE`.
+
+Фронт: `fetch` + `blob()` + `URL.createObjectURL` → `<img>`. Revoke при закрытии.
+
+#### Review
+`POST /api/staff/onboarding-kyc/:telegramId/review`
+```json
+{ "decision": "approved" | "rejected", "reason": "..." }
+```
+Reject: `reason.trim().length` ∈ [3, 300] иначе 400 `INVALID_REJECTION_REASON`.  
+200 `{ success, request, client? }` — `client` provisional summary если approved и телефон не связан.  
+409 `KYC_NOT_PENDING` | `KYC_NOT_FOUND`.  
+Сайд-эффект: `notifyOnboardingKycResult`; при approve — попытка link к существующей session.
+
+#### Assign phone (provisional)
+`POST /api/staff/onboarding-kyc/:telegramId/assign-phone`  
+`{ "phone": "+998..." }`  
+Только если status=`approved` и ещё не linked.  
+Создаёт/обновляет employee, whitelist phone, копирует KYC docs.
+
+### 7.7. Classic (employee) KYC — второй трек
+Эндпоинты:
+- `GET /api/kyc/status`, `POST /api/kyc/submit` (клиент после логина)
+- `GET /api/staff/kyc/:clientId/documents/:type`
+- `POST /api/staff/kyc/:clientId/review` `{ decision, reason }`
+
+Notify classic: **создатель клиента + все админы** (не все операторы).  
+Callbacks: `kyc_ok:{phoneDigits}` / `kyc_rej:{phoneDigits}`.
+
+### 7.8. Причины отказа (пресеты)
+Обязательные пресеты в веб-панели (select):
+1. `Фото размыто или нечитаемо`
+2. `Данные документа не видны`
+3. `Документ обрезан или закрыт`
+4. `Селфи не соответствует требованиям`
+
+В боте: те же + «Другая причина» (свободный текст 3–300).  
+В вебе: либо те же пресеты, либо пресеты + optional textarea (лучше чем только ссылки).
+
+### 7.9. Reconcile (анти-потеря данных)
+При старте сервера и при `GET /staff/dashboard`:
+- Сканировать `attachments/tg_*`
+- Если есть файлы KYC, а записи в JSON нет — восстановить как pending/по метаданным
+- **Не** поднимать `rejected` обратно в `pending` только из файлов
+- Вернуть счётчик `recoveredOnboarding` и показать notice в UI
+
+### 7.10. Клиентские экраны KYC
+**KycOnboardingGate**
+- 3 upload slot’а с превью, remove, размер МБ
+- Компрессия на клиенте до submit
+- Ошибки сети: фото остаются на экране, можно retry
+- Rejected: показать reason + разрешить новый submit
+
+**KycPendingGate**
+- Текст ожидания
+- Кнопка «Проверить статус» → повторный `resolveClientEntry`
+- Рекомендация ТЗ: также poll каждые 10–15с на pending-экране (улучшение UX; минимум — manual refresh)
+
+После approve → AuthGate (телефон).  
+`POST /api/auth/verify` без approved onboarding — отказ (`kyc_required` / pending / rejected).
+
+### 7.11. Acceptance: «KYC приходит»
+Авто/ручной сценарий must-pass:
+1. Клиент (TMA) загрузил 3 фото → 200 pending.
+2. Файлы есть на диске `attachments/tg_{id}/`.
+3. Запись в `kyc_onboarding.json` status=pending.
+4. Админ получил Telegram message + 3 photo (если BOT_TOKEN и admin писал боту /start).
+5. Staff Dashboard (после unlock) в табе KYC показывает карточку этой заявки ≤20с (poll) или сразу после ↻.
+6. Открытие документов показывает 3 изображения в модалке.
+7. Approve → клиент получает bot message → в Mini App переходит к телефону.
+8. Reject с reason → клиент видит rejected gate с текстом.
 
 ---
 
-## 8. Auth & security
+## 8. Staff Dashboard — детальное UI ТЗ
 
-### Client
-- Header `Authorization: tma <Telegram.WebApp.initData>`
-- Validate HMAC-SHA256 with bot token; max age initData **24h**
-- Session binds telegramId ↔ phone
-- Cabinet/withdraw require session + approved KYC (onboarding and/or employee)
+Это **не** «страница с тремя вкладками». Ниже — обязательная структура.  
+Визуальный стиль: аккуратный product UI на CSS variables бренда. Не «голый HTML 1998», не dashboard-slime из 20 карточек в первом экране. Плотная рабочая панель.
 
-### Staff web (Mini App)
-- Telegram ID ∈ admins ∪ operators
-- Code `742951` (timing-safe compare)
-- Unlock in-memory Map, TTL **12h**
-- Rate limit: **5 failed attempts / 15 min** per telegramId
+### 8.1. Shell
+- Контейнер: Mini App `max-width: 980px`, browser `1280px`, padding + safe-area
+- Loading: полноэкранный spinner до первой загрузки
+- 401 на любом staff fetch → `onLogout()`
+- Background poll dashboard каждые **20s** (ошибки глотать, данные не сбрасывать)
+- Кнопка ↻ в таббаре: force refresh dashboard+tags
 
-### Browser admin
-- Path `BROWSER_ADMIN_PATH` (default `/ops-uztronix-x7m2`)
-- Admins only
-- Login: telegramId + secret → HMAC-signed cookie `uz_browser_staff`
-- Secret: `BROWSER_SESSION_SECRET` or fallback `BOT_TOKEN`
-- Same 12h TTL
+### 8.2. Header
+```
+[eyebrow]  Администратор | Оператор | Браузер · Администратор
+[h1]      Служебная панель   (или «{{PROJECT_NAME}} — Панель управления»)
+[sub]     profile.name || deskName || «Сотрудник»
+[actions] ThemeToggle · Выйти
+```
 
-### Admins sources (union)
-1. Built-in `[8889663205]`
-2. `ADMIN_IDS` env
-3. `admins.json`  
-Env/built-in нельзя удалить через UI/API.
+### 8.3. Desk block (только operator)
+Секция «Кто работает сейчас»:
+- input + datalist `recentDeskNames`
+- placeholder «Имя оператора»
+- button «Применить» (disabled если trim < 2)
+- если `needsDeskName`: предупреждение «Выберите имя смены, чтобы загрузить закреплённых клиентов.»
+- `POST /api/staff/desk` `{ name }` (2–80 chars)
 
-### Express
-- `express.json({ limit: '15mb' })` — KYC payloads
-- 413 → `{ error: 'PAYLOAD_TOO_LARGE' }`
-- SPA fallback: `GET *` → `dist/index.html`
+### 8.4. Stats (5 карточек)
+1. Клиентов  
+2. KYC на проверке (warning style) — employee pending  
+3. KYC до телефона — onboarding pending  
+4. KYC подтверждено  
+5. Не заполнено  
+
+CSS: grid, на desktop ≥5 колонок или 3+2, на mobile 2 колонки.  
+Не делать 5 карточек в `repeat(4, 1fr)` без wrap-логики.
+
+### 8.5. Notices
+- Зелёный notice: «Восстановлено заявок KYC из вложений: N»
+- Красный error: «Не удалось загрузить…»
+- Закрытие `×`
+
+### 8.6. Tabs
+| id | label | badge |
+|----|-------|-------|
+| kyc | KYC | onboardingPending + employeePending |
+| clients | Клиенты | clients.length |
+| actions | Действия | — |
+
+### 8.7. Tab KYC — обязательный UX
+
+**Пусто:** dashed empty state «Нет заявок на проверке».
+
+**Блок A — Onboarding (до телефона)**  
+Для каждого `onboardingKyc` (pending):
+```
+Карточка:
+  title: KYC до телефона · TG {telegramId}
+  name: displayName || @username || «Пользователь Telegram»
+  badge: На проверке
+  rows: Username | Телефон: ещё не запрошен | Подано: {datetime}
+  CTA: «Открыть документы»
+```
+
+**Блок B — Employee KYC**  
+Для каждого client с `kycStatus==='pending'`:
+```
+  #{clientId} · name/phone
+  badge На проверке
+  Телефон | Оператор | Подано
+  CTA: «Открыть документы»
+```
+
+**Модалка проверки (bottom-sheet на mobile, center на desktop):**
+- Заголовок по типу очереди
+- Сетка 3 изображений с подписями: «ID-карта · лицевая», «…обратная», «Селфи с документом»
+- Loading state «Загружаем…» пока blob’ы грузятся
+- Если ещё pending:
+  - select причины отказа (пресеты)
+  - кнопки **Отклонить** / **Подтвердить**
+  - double-submit lock (`reviewLock`)
+- Если уже решено: «Решение уже принято: {status}» + закрыть
+- Ошибка `KYC_NOT_PENDING` → notice «Заявка уже обработана» + refresh
+
+**Запрещено** оставлять единственным UX три голые текстовые ссылки `idCardFront` без превью в модалке. Ссылки можно дублировать, но превью обязательно.
+
+### 8.8. Tab Клиенты
+
+**Поиск (все роли):**  
+placeholder `Поиск по имени, телефону, оператору или ID`  
+поля: clientId, fullName, phone, operator, telegramId, username, displayName.
+
+**Фильтры (admin only):**
+- Сортировка: недавние/старые действия; новые лиды; ID ↓↑; Имя; Оператор
+- Активность: всё / час / 24ч / 7д / 30д
+- Оператор, KYC status, Тег (вкл. «Без тегов»), Профиль complete/incomplete, Telegram linked/unlinked
+- Summary: `Показано: N из M` + «Сбросить фильтры»
+
+**Таблица/grid (sticky header, horizontal scroll, sticky lead col):**
+Колонки: Лид (⚠️ если incomplete) · Телефон · Telegram · Оператор · KYC · динамические теги-чекбоксы · Активность
+
+Клик по лиду:
+- обычный → detail modal (редактирование полей, теги, сообщение, KYC docs)
+- `provisional: true` → modal «KYC подтверждён · телефон ещё не указан» + input phone + «Сохранить номер» + опционально «Документы»
+
+Tag toggle в ячейке: POST/DELETE tag; для provisional — disabled.
+
+### 8.9. Tab Действия (tools cards)
+
+Всем:
+- ➕ Добавить клиента
+- 📅 Сегодня
+- 🏷 Справочник тегов
+- ✅ Подтверждения рассылок
+- ℹ️ Помощь
+
+Только admin:
+- 📊 Статистика (`range=hour|today|day|week|month|all`, TZ `{{TZ_BUSINESS}}`)
+- ✉️ Рассылка (mine / all; all → approvals всех операторов ИЛИ один admin)
+- 📥 Экспорт Excel
+- 👥 Операторы и админы
+
+Каждая карточка открывает рабочий экран/модалку с формами, списками, ошибками — не `alert()`.
+
+### 8.10. StaffGate / BrowserStaffGate
+- Mini App: поле кода `{{PANEL_SECRET}}`, title «Служебный вход»
+- Browser: Telegram ID + код, title «Браузерный вход»
+- Rate limit: 5 fails / 15 min; unlock TTL 12h
+- timing-safe compare кода
 
 ---
 
-## 9. HTTP API (все под `/api`)
+## 9. Клиентский кабинет
 
-### Health / client
-| Method | Path | Notes |
-|--------|------|-------|
-| GET | `/health` | ok, bot status, dataDir, onboarding stats |
-| GET | `/onboarding/kyc/status` | |
-| POST | `/onboarding/kyc/submit` | 3 base64 images |
-| GET | `/auth/status` | |
-| POST | `/auth/verify` | `{ phone }` — требует approved onboarding KYC |
-| GET | `/cabinet` | session + approved |
-| GET | `/kyc/status` | |
-| POST | `/kyc/submit` | post-login KYC |
-| POST | `/withdraw` | `{ card, amount? }` |
+После `ready`:
+- Header: логотип, lang toggle, theme
+- BottomNav: Кабинет / Документы
+- Cabinet: greeting, fullName, employeeId, balance card, withdraw CTA, rows (position fixed **`Agent`**, age, maritalStatus, phone masked), lastWithdrawal
+- Withdraw modal: card + amount (пусто=весь баланс); только если `withdrawAllowed` (KYC approved + card ∈ allowedCards)
+- AccessDenied: универсальный текст про «старые SIM / доступ недоступен» (обфускация whitelist miss)
+- Phone auth: `+{{PHONE_COUNTRY_CODE}}` + ровно `{{PHONE_LOCAL_LENGTH}}` цифр
 
-### Staff unlock / browser
-| Method | Path |
-|--------|------|
-| GET | `/staff/status` |
-| POST | `/staff/unlock` | `{ code }` |
-| POST | `/staff/lock` |
-| POST | `/staff/desk` | desk operator name |
-| GET | `/browser-auth/session` |
-| POST | `/browser-auth/login` | `{ telegramId, code }` |
-| POST | `/browser-auth/logout` |
-
-### Staff CRM (requires unlocked staff session)
-| Method | Path |
-|--------|------|
-| GET | `/staff/dashboard` |
-| GET/POST | `/staff/clients`, `/staff/clients/:clientId` |
-| PATCH | `/staff/clients/:clientId` |
-| PATCH | `/staff/clients/:clientId/operator` |
-| GET/POST/DELETE | `/staff/tags`, `/staff/tags/:tagId` |
-| POST/DELETE | `/staff/clients/:clientId/tags`, `.../tags/:tagId` |
-| GET | `/staff/clients/:clientId/tags/:tagId/photo` |
-| POST | `/staff/clients/:clientId/message` |
-| GET | `/staff/summaries/today`, `/staff/summaries/operators` |
-| GET | `/staff/stats?range=` |
-| POST/GET | `/staff/broadcasts`, `/staff/broadcasts/pending` |
-| POST | `/staff/broadcasts/:id/approve` |
-| GET | `/staff/export` | Excel download |
-| CRUD | `/staff/operators`, `/staff/admins` |
-| GET | `/staff/onboarding-kyc/:telegramId` + `/documents/:type` |
-| POST | `/staff/onboarding-kyc/:telegramId/review` |
-| POST | `/staff/onboarding-kyc/:telegramId/assign-phone` |
-| GET | `/staff/kyc/:clientId/documents/:type` |
-| POST | `/staff/kyc/:clientId/review` |
-
-Permissions: operators scoped to own clients; admins full. Desk name required for operator client lists.
+Должность в данных **всегда** `"Agent"` (locked). Поля профиля: fullName, age, maritalStatus, employeeId, advanceBalance.
 
 ---
 
-## 10. Telegram Bot CRM (button-first)
+## 10. Данные (JSON в DATA_DIR)
 
-### Identity guard
-При старте `getMe`; если `EXPECTED_BOT_USERNAME` задан и не совпал — **не начинать polling**, записать botStatus error.
+| File | Назначение |
+|------|------------|
+| phones.json | whitelist телефонов |
+| sessions.json | telegramId → phone + profile |
+| employees.json | phone → Employee |
+| client_counter.json | next id 1,2,3… |
+| tags.json | каталог тегов |
+| operators.json | операторы |
+| admins.json | доп. админы |
+| desk_sessions.json | active/recent desk names |
+| kyc_onboarding.json | pre-phone KYC |
+| broadcasts.json | рассылки |
+| tag_reminders.json | snooze/ignore |
+| attachments/** | бинарники |
+| export xlsx | debounced |
 
-### `/start`
-- Кнопка WebApp «🚀 Открыть Mini App» (`WEBAPP_URL`)
-- Menu button «Shaxsiy kabinet»
+### Employee (минимум)
+```
+phone, clientId, fullName, position:'Agent',
+age, maritalStatus, employeeId, advanceBalance,
+operator, operatorId, tags[], tagHistory[],
+allowedCards[], createdAt, createdBy, createdByName,
+kycStatus, kycSubmittedAt, kycReviewedAt, kycReviewedBy, kycReviewedByName,
+kycRejectionReason, kycDocuments:{idCardFront,idCardBack,selfie},
+updatedAt, lastWithdrawal?
+```
 
-### Panel entry
-- `/panel`, `/operator`, `/admin` — только для сохранённых Telegram ID операторов/админов (без кода)
-- `/cancel`, `/skip`, `/help`
-- `/export` — admin Excel
+### Default tags (global first 3)
+1. pasport — Паспорт получен  
+2. dogovor — Договор подписан  
+3. v_rabote — В работе  
+Далее: global (admin) или operator-scoped.
 
-### Operator keyboard (пример)
+### Phone normalize
+- Client: strict `+code` + local length  
+- Operator add: looser normalize (код страны + любая локальная часть ≥1)
+
+### Card normalize
+digits 12–19.
+
+Admins = `{{BUILTIN_ADMIN_IDS}} ∪ ADMIN_IDS env ∪ admins.json`. Built-in/env не удаляются.
+
+---
+
+## 11. Auth contracts
+
+### Client requests
+```
+Authorization: tma <Telegram.WebApp.initData>
+```
+HMAC validate, age ≤24h.
+
+### Staff Mini App
+1. Telegram ID must be admin/operator  
+2. `POST /api/staff/unlock` `{ code: "{{PANEL_SECRET}}" }`  
+3. Subsequent staff routes check unlock map TTL 12h  
+
+### Browser
+1. Path `{{BROWSER_ADMIN_PATH}}`  
+2. `POST /api/browser-auth/login` `{ telegramId, code }` — admin only  
+3. Set signed cookie; `credentials:'include'`  
+4. `/api/browser-auth/session`, `/logout`
+
+Все staff fetch с фронта: `credentials: 'include'` + tma header если есть.
+
+---
+
+## 12. Полный каталог API
+
+### Public/client
+- GET `/api/health`
+- GET/POST `/api/onboarding/kyc/status|submit`
+- GET/POST `/api/auth/status|verify`
+- GET `/api/cabinet`
+- GET/POST `/api/kyc/status|submit`
+- POST `/api/withdraw`
+
+### Staff session
+- GET `/api/staff/status`
+- POST `/api/staff/unlock|lock|desk`
+- GET/POST `/api/browser-auth/session|login|logout`
+
+### Staff CRM
+- GET `/api/staff/dashboard`
+- GET/POST `/api/staff/clients`, GET/PATCH `/api/staff/clients/:id`
+- PATCH `/api/staff/clients/:id/operator`
+- GET/POST/DELETE `/api/staff/tags`
+- POST/DELETE `/api/staff/clients/:id/tags[/:tagId]`
+- GET photo tag
+- POST message client
+- GET summaries/today|operators
+- GET stats?range=
+- POST/GET broadcasts + approve
+- GET export
+- CRUD operators, admins
+- onboarding-kyc: GET, documents, review, assign-phone
+- employee kyc: documents, review
+
+Каждый endpoint: явные 400/401/403/404/409 + machine-readable `error` code.
+
+---
+
+## 13. Telegram Bot CRM (button-first)
+
+Identity guard: `getMe` vs `EXPECTED_BOT_USERNAME`.
+
+`/start` → WebApp button «🚀 Открыть Mini App» + menu `{{WEBAPP_MENU_LABEL}}`.  
+`/panel` `/operator` `/admin` — keyboard CRM без кода (только known IDs).  
+`/cancel` `/skip` `/help`; `/export` admin.
+
+Operator keyboard:
 ```
 👤 Мои клиенты | ➕ Клиент
 🔍 Поиск по ID | 🏷 Теги
@@ -470,151 +660,156 @@ Permissions: operators scoped to own clients; admins full. Desk name required fo
 ℹ️ Помощь
 ```
 
-Admin keyboard дополнительно: все клиенты, сводка операторов, рассылки, экспорт, управление операторами/админами, KYC очереди и т.п.
+Admin: + все клиенты, сводки, рассылки, экспорт, доступы, KYC.
 
-### Flows
-1. **Desk name** — несколько людей на одном Telegram: `👤 Кто я / сменить`; без имени список «мои» пуст
-2. **Add client** — phone → operator name → auto clientId → card
-3. **Search** — by clientId `5` or phone `+998...`
-4. **Client card** — ✏️ Данные, 🏷 Теги, 📎 Фото тегов, ✉️ Написать, ◀️ Панель
-5. **Edit fields** — fullName, age, maritalStatus, employeeId, advanceBalance (position locked Agent; НЕ dept/tenure — устаревшее)
-6. **Tags** — assign with note and/or photo or «✓ Без вложений» / `/skip`; unassign; view note/photo
-7. **Message** — one client; only if session/telegramId known
-8. **Today summary** — clients created today (Moscow calendar day)
-9. **Broadcasts** — mine / all; `all` needs approvals from all linked operators **or** one admin
-10. **Tag reminders** — scan every 5m; if 2h without tag activity → notify operator; snooze 1–168h; ignore; quiet hours Moscow 20:00–06:00 (`disable_notification`)
-11. **KYC review in chat** — open docs, approve/reject
+Flows: desk name → add client → auto clientId → card (Данные/Теги/Фото/Написать).  
+Tags: note and/or photo или «Без вложений».  
+Messages: только если есть session telegramId.  
+Broadcasts all: approvals.  
+Tag reminders: scan 5m, idle 2h, snooze 1–168h, quiet hours 20:00–06:00 в `{{TZ_BUSINESS}}`.  
+KYC callbacks: `onkyc_ok/rej` и `kyc_ok/rej` + пресеты причин.
 
-> Slash-команды `/add`, `/set`, `/addcard` из старого README **не обязательны** как primary UX — основной UI кнопки + Staff API. Whitelist телефонов/карт может управляться через store/API/admin tools; карты (`allowedCards`) критичны для withdraw.
+Правило CRM: **кто внёс (desk name) — тот ведёт**. Оператор не видит чужих clients. Onboarding KYC очередь — общая.
 
 ---
 
-## 11. Бизнес-логика и edge cases (обязательно)
+## 14. Design tokens (универсальные)
 
-1. **KYC-before-phone:** auth/cabinet закрыты до onboarding approve.
-2. **Dual KYC:** onboarding pre-phone + post-login `/kyc/submit` для pending/rejected employee.
-3. **Phone link on verify:** копирует onboarding docs на employee; конфликт если `linkedPhone` другой.
-4. **Provisional clients:** approved onboarding без телефона видны в staff clients; `assign-phone` создаёт/линкует employee.
-5. **Attachment reconcile** on startup/dashboard; не восстанавливать rejected как pending.
-6. **Operator ownership by desk name** (не только telegramId).
-7. **Position always `Agent`.**
-8. **Withdraw:** card ∈ `allowedCards`, KYC approved, amount ≤ balance; empty amount = full balance; updates `lastWithdrawal` and decrements balance. Нет платёжного провайдера — учёт внутри системы.
-9. **Broadcasts `all`:** multi-operator approval OR single admin.
-10. **Images:** validate magic bytes; size limits; reject reason 3–300 chars.
-11. **JSON durability:** per-file locks where needed (onboarding), atomic writes, `.bak`.
-12. **Denial UX obfuscation** for whitelist misses.
-13. **Stats ranges** use Moscow TZ rolling/calendar windows.
-14. **Debounced sync** Sheets + Excel ~1.5s after data mutations (`scheduleDataSync`).
-
-### Google Sheets tabs (hardcoded)
-- `Все лиды` — HEADERS_MAIN
-- `История тегов` — HEADERS_TAG_HISTORY
-- `Фото` — HEADERS_PHOTOS
-- `KYC` — HEADERS_KYC
-- + per-operator sheets (sanitize sheet name)
-
-HEADERS_MAIN columns:
-`ID клиента, Телефон, Telegram ID, Telegram username, Имя в Telegram, Telegram привязан, Последний визит, ФИО, Должность, Возраст, Семейное положение, ID сотрудника, Аванс (сум), Оператор, Активные теги, Создан, Обновлён, Внёс в систему, KYC статус, KYC подано, KYC проверено, KYC проверил, KYC ID-карта (лицевая), KYC ID-карта (обратная), KYC селфи, KYC причина отказа`
-
----
-
-## 12. i18n — полный набор ключей
-
-Реализуй `uz.json` и `ru.json` с секциями:
-`brand`, `auth`, `error`, `cabinet`, `withdraw`, `nav`, `theme`, `documents`, `kyc` (+ `kyc.errors` с кодами `KYC_PENDING`, `KYC_ALREADY_APPROVED`, `KYC_DOCUMENTS_REQUIRED`, `INVALID_IMAGE`, `IMAGE_TOO_SMALL`, `IMAGE_TOO_LARGE`, `PAYLOAD_TOO_LARGE`, `PROFILE_NOT_FOUND`, `KYC_SUBMIT_FAILED`).
-
-Тексты — как в разделе 5 / продуктовых формулировках выше (UZ default language).
-
-Staff Dashboard UI — преимущественно на русском (не обязательно через i18n).
-
----
-
-## 13. `server.js` boot sequence
-
-```
-express.json 15mb
-mount /api router
-413 handler
-static dist
-SPA fallback *
-listen PORT
-log dataDir, sheets status, browser admin path
-reconcileOnboardingFromAttachments()
-if BOT_TOKEN → startBot else bot disabled
+```css
+:root {
+  --brand-primary: {{BRAND_PRIMARY}};
+  --brand-primary-dark: {{BRAND_PRIMARY_DARK}};
+  --brand-primary-soft: {{BRAND_SOFT}};
+  --brand-accent: {{BRAND_ACCENT}};
+  --brand-accent-soft: {{ACCENT_SOFT}};
+  --bg: #F5F7FA;
+  --surface: #FFFFFF;
+  --text: #1A2332;
+  --text-muted: #5C6B7A;
+  --border: #DDE3EA;
+  --error: #B42318;
+  --radius: 10px;
+  --font-sans: /* выразительный шрифт; не обязательно Inter; согласовать с заказчиком */;
+}
 ```
 
----
+Dark theme обязателен (toggle).  
+Brand strip: градиент primary-dark | accent.  
+Агент **не** навязывает purple/cream AI-шаблоны.  
+Иконки/эмодзи в tools допустимы умеренно.
 
-## 14. Тесты (минимум)
-
-Node test runner покрывает модули:
-`attachments, bot, browserAuth, clientAuth, dataPath, onboardingKyc, panelAccess, staffDto, stats, store, tagReminders, telegram`
-
-Критичные кейсы:
-- panel secret timing-safe + attempt limits + TTL
-- browser session sign/verify/expiry
-- phone normalize strict vs operator
-- onboarding reconcile does not revive rejected
-- Moscow quiet hours / stats windows
-- store employee defaults & migrations (legacy `stage` → tags)
-
-Frontend tests не обязательны.
+i18n клиента: полные словари brand/auth/error/cabinet/withdraw/nav/theme/documents/kyc(+errors).  
+Staff UI — на русском (рабочий язык операторов), если заказчик не сказал иное.
 
 ---
 
-## 15. Документация в репо
+## 15. Google Sheets / Excel (optional)
 
-1. **README.md** (RU): возможности, env, Railway volume, Sheets setup, web panel code `742951`, browser path, pointer to operator guide. Не описывать устаревшие `/set dept/tenure` как актуальные поля — актуальные поля: имя, возраст, семейное положение, ID, аванс.
-2. **docs/OPERATOR_GUIDE.md**: полный playbook оператора (кнопки, воронка тегов, desk names, FAQ, mermaid daily cycle).
-
----
-
-## 16. Критерии приёмки (Definition of Done)
-
-- [ ] `npm install && npm run build && npm test && npm start` работает
-- [ ] Mini App: KYC → pending → approve (staff) → phone → cabinet
-- [ ] Whitelist miss → AccessDenied с текстом про старые SIM
-- [ ] Withdraw только с allowedCards и approved KYC
-- [ ] Staff unlock `742951` + Telegram role check; 12h session
-- [ ] Browser admin path works for admins
-- [ ] Bot `/panel` button CRM: add/search/tag/message/today
-- [ ] Desk operator names на shared Telegram account
-- [ ] Tag reminders + quiet Moscow nights
-- [ ] Sheets sync optional; Excel export for admin
-- [ ] Railway healthcheck `/api/health`; data on volume
-- [ ] uz/ru i18n + light/dark theme + brand colors/logos
-- [ ] Position always Agent; age + maritalStatus in profile
+При любой мутации данных — debounce ~1.5s `scheduleDataSync`:
+- Excel на диск + admin download `/api/staff/export`
+- Sheets tabs: `Все лиды`, `История тегов`, `Фото`, `KYC`, + per-operator sheets
 
 ---
 
-## 17. Чего НЕ делать
+## 16. Тесты (минимум must)
 
-- Не использовать SQL/Prisma/Redis/Tailwind/MUI
-- Не добавлять реальный платёжный gateway
-- Не делать purple/cream AI-slop дизайн — строго сине-оранжевый Uztronix + Inter
-- Не открывать кабинет до одобренного onboarding KYC
-- Не показывать оператору чужих клиентов
-- Не стартовать бота при mismatch `EXPECTED_BOT_USERNAME`
-
----
-
-## 18. Порядок реализации (для агента)
-
-1. Scaffold Vite React-TS + Express `server.js` + Railway/env
-2. `dataPath` + `store` + phones/sessions/employees + tests
-3. Telegram initData auth + AuthGate + AccessDenied
-4. Onboarding KYC + attachments + staff review API
-5. Cabinet + Withdraw + Documents KYC
-6. Tags/operators/admins/desk + permissions
-7. Bot button CRM (bot.js)
-8. StaffGate + StaffDashboard (all tabs)
-9. Browser admin auth
-10. Broadcasts, stats, tag reminders
-11. Sheets/Excel export
-12. i18n/theme/logos polish + OPERATOR_GUIDE + README
-13. Full test pass + manual flow checklist
+- panelAccess: timing-safe, attempts, TTL  
+- browserAuth: sign/verify/expiry/admin-only  
+- clientAuth: initData validate  
+- onboardingKyc: submit→pending, review, **reconcile does not revive rejected**  
+- attachments: magic bytes / size  
+- store: phone normalize strict vs operator  
+- stats/tagReminders: TZ windows, quiet hours  
+- kyc notify targets (unit с mock bot)
 
 ---
 
-**Итог одной фразой для агента:**  
-Собери монолитный Telegram Mini App + Express CRM «Uztronix»: KYC-first вход, whitelist-телефон, кабинет аванса, JSON-хранилище, button-бот и веб-панель операторов/админов с кодом `742951`, Sheets/Excel, Railway — с точным повторением потоков, моделей, API и сине-оранжевого UI из этого ТЗ.
+## 17. Definition of Done (жёсткий)
+
+### KYC
+- [ ] Submit onboarding создаёт файлы + JSON pending  
+- [ ] Telegram notify уходит админам и операторам с 3 фото  
+- [ ] Dashboard показывает заявку в блоке «до телефона»  
+- [ ] Modal открывает 3 превью  
+- [ ] Approve/Reject работает из веба и из bot callbacks  
+- [ ] Клиент получает результат в Telegram и корректный gate в Mini App  
+- [ ] Provisional client + assign-phone  
+- [ ] Reconcile из attachments  
+
+### Admin UX
+- [ ] Не «три ссылки на белом фоне» — полноценные карточки, stats, tabs, modals  
+- [ ] Poll 20s + ручной refresh  
+- [ ] Desk name для операторов  
+- [ ] Clients grid + admin filters  
+- [ ] Actions tools рабочие  
+- [ ] Browser admin path  
+
+### Product
+- [ ] Phone whitelist / denial obfuscation  
+- [ ] Cabinet + withdraw rules  
+- [ ] Bot panel button CRM  
+- [ ] `npm test` green, `npm run build` ok, healthcheck ok  
+
+---
+
+## 18. Чего НЕ делать
+
+- Не делать одну KYC-модель «после телефона»  
+- Не забывать notify в бот  
+- Не отдавать staff dashboard без `onboardingKyc[]`  
+- Не показывать оператору чужих клиентов  
+- Не хардкодить чужой бренд/логотип — только плейсхолдеры  
+- Не SQL/Redis «для красоты»  
+- Не payment gateway  
+- Не стартовать polling при неверном bot username  
+- Не считать админку готовой, если KYC tab = empty state при наличии pending в JSON  
+
+---
+
+## 19. Порядок реализации (для агента)
+
+1. Scaffold + dataPath/store + health  
+2. Telegram initData auth  
+3. **Onboarding KYC store + submit + notify + reconcile** (с тестами)  
+4. Staff unlock + dashboard API returning `onboardingKyc`  
+5. **StaffDashboard KYC tab + document modal + review** (сразу нормальный UI)  
+6. Phone verify + link KYC → employee  
+7. Cabinet/withdraw/documents  
+8. Clients grid + provisional assign-phone  
+9. Tags/operators/desk/bot CRM  
+10. Broadcasts/stats/reminders/export  
+11. Browser admin  
+12. i18n/theme/tokens из плейсхолдеров  
+13. Прогон acceptance §7.11 и §17  
+
+---
+
+## 20. Стартовый промпт-хвост (вставь в конец своего запроса агенту)
+
+```
+Собери продукт по этому ТЗ полностью.
+Плейсхолдеры:
+PROJECT_NAME=...
+PACKAGE_NAME=...
+BRAND_PRIMARY=...
+BRAND_PRIMARY_DARK=...
+BRAND_ACCENT=...
+PANEL_SECRET=...
+BROWSER_ADMIN_PATH=...
+PHONE_COUNTRY_CODE=998
+PHONE_LOCAL_LENGTH=9
+CURRENCY_LABEL=сум
+BUILTIN_ADMIN_IDS=[...]
+DEFAULT_LANG=uz
+SECONDARY_LANG=ru
+WEBAPP_MENU_LABEL=Shaxsiy kabinet
+TZ_BUSINESS=Europe/Moscow
+
+Приоритет №1: рабочий Onboarding KYC end-to-end (submit → disk → JSON → Telegram notify → dashboard card → modal preview → approve/reject → client gate).
+Приоритет №2: нормальный Staff Dashboard (не каркас).
+Не упрощать двойную очередь KYC. Не пропускать notify. Не оставлять документы без image preview.
+```
+
+---
+
+**Конец ТЗ.** Если агент отдаёт админку без превью документов и без блока onboarding KYC — это провал приёмки, переделать.
