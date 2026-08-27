@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'crypto';
 
 const webSessions = new Map();
 const failedAttempts = new Map();
-const PANEL_SECRET = '742951';
+const PANEL_SECRET = '201121';
 const PANEL_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
