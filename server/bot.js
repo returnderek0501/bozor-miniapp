@@ -59,9 +59,16 @@ export function miniAppUrl() {
   return String(process.env.WEBAPP_URL || DEFAULT_MINI_APP_URL).trim();
 }
 
+export const START_MESSAGE = [
+  '<b>Uztronix Mini App</b>',
+  'Xush kelibsiz! Ilovani ochish uchun quyidagi tugmani bosing.',
+].join('\n');
+
+export const MINI_APP_BUTTON_TEXT = '🚀 Mini Appni ochish';
+
 export function miniAppLaunchKeyboard(url = miniAppUrl()) {
   return ik([[
-    { text: '🚀 Открыть Mini App', web_app: { url } },
+    { text: MINI_APP_BUTTON_TEXT, web_app: { url } },
   ]]);
 }
 
@@ -987,7 +994,7 @@ export async function handleCommand(bot, msg) {
     clearAllPending(chatId);
     const result = await bot.sendMessage(
       chatId,
-      '<b>Uztronix Mini App</b>\nНажмите кнопку ниже, чтобы открыть приложение.',
+      START_MESSAGE,
       miniAppLaunchKeyboard(),
     );
     if (!result?.ok) throw new Error(result?.description || 'Telegram sendMessage failed');
