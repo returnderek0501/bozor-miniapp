@@ -32,7 +32,7 @@ import {
   kycStatusLabel,
 } from './kyc.js';
 import { setStaffMessagingBot } from './staffMessaging.js';
-import { updateBotStatus } from './botStatus.js';
+import { updateBotStatus, getBotStatus } from './botStatus.js';
 import {
   ignoreTagReminder, snoozeTagReminder, startTagReminderScheduler,
 } from './tagReminders.js';
@@ -70,6 +70,43 @@ export function miniAppLaunchKeyboard(url = miniAppUrl()) {
   return ik([[
     { text: MINI_APP_BUTTON_TEXT, web_app: { url } },
   ]]);
+}
+
+export function miniAppUrlKeyboard(url) {
+  return ik([[
+    { text: MINI_APP_BUTTON_TEXT, url },
+  ]]);
+}
+
+export function miniAppStartAppUrl(username = getBotStatus().username) {
+  const name = String(username || process.env.EXPECTED_BOT_USERNAME || '')
+    .trim()
+    .replace(/^@/, '');
+  return name ? `https://t.me/${name}?startapp` : '';
+}
+
+export async function sendStartWelcome(bot, chatId, options = {}) {
+  const url = options.url || miniAppUrl();
+  const startAppUrl = miniAppStartAppUrl(options.username);
+  const attempts = [
+    miniAppLaunchKeyboard(url),
+    startAppUrl ? miniAppUrlKeyboard(startAppUrl) : null,
+    url ? miniAppUrlKeyboard(url) : null,
+    {},
+  ].filter((extra) => extra != null);
+
+  let lastError = 'Telegram sendMessage failed';
+  for (const extra of attempts) {
+    try {
+      const result = await bot.sendMessage(chatId, START_MESSAGE, extra);
+      if (result?.ok) return result;
+      lastError = result?.description || lastError;
+    } catch (error) {
+      lastError = error?.message || lastError;
+    }
+    console.warn('Start welcome send failed:', lastError);
+  }
+  throw new Error(lastError);
 }
 
 export function matchesExpectedBotUsername(botInfo, expectedUsername) {
@@ -964,7 +1001,7 @@ async function handlePendingText(bot, msg) {
 export async function handleCommand(bot, msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
-  const fromId = msg.from.id;
+  const fromId = msg.from?.id;
 
   if (matchCmd(text, '/cancel')) {
     clearAllPending(chatId);
@@ -992,12 +1029,7 @@ export async function handleCommand(bot, msg) {
 
   if (matchCmd(text, '/start', '/старт')) {
     clearAllPending(chatId);
-    const result = await bot.sendMessage(
-      chatId,
-      START_MESSAGE,
-      miniAppLaunchKeyboard(),
-    );
-    if (!result?.ok) throw new Error(result?.description || 'Telegram sendMessage failed');
+    await sendStartWelcome(bot, chatId);
     return;
   }
 
@@ -1814,11 +1846,15 @@ export function startBot(token) {
           for (const update of res.result) {
             offset = update.update_id + 1;
             updateBotStatus({ lastUpdateAt: new Date().toISOString() });
-            if (update.message) {
-              if (update.message.photo || update.message.document) await handleMediaMessage(bot, update.message);
-              else await handleCommand(bot, update.message);
+            try {
+              if (update.message) {
+                if (update.message.photo || update.message.document) await handleMediaMessage(bot, update.message);
+                else await handleCommand(bot, update.message);
+              }
+              if (update.callback_query) await handleCallback(bot, update.callback_query);
+            } catch (error) {
+              console.error('Bot update handler error:', error.message);
             }
-            if (update.callback_query) await handleCallback(bot, update.callback_query);
           }
         }
       } catch (e) {
