@@ -43,11 +43,11 @@ test('browser login accepts only admins with panel secret', () => {
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
   try {
-    const ok = loginBrowserAdmin(8889663205, '742951', 5_000);
+    const ok = loginBrowserAdmin(8889663205, '887766', 5_000);
     assert.equal(ok.ok, true);
     assert.ok(ok.token);
 
-    const denied = loginBrowserAdmin(111111, '742951', 5_000);
+    const denied = loginBrowserAdmin(111111, '887766', 5_000);
     assert.equal(denied.ok, false);
     assert.equal(denied.error, 'ADMIN_REQUIRED');
 
