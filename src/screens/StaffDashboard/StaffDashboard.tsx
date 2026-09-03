@@ -48,6 +48,29 @@ function statusLabel(status: StaffClient['kycStatus']) {
   return 'Не пройден';
 }
 
+const KYC_DOC_LABELS: Record<keyof DocumentUrls, string> = {
+  idCardFront: 'ID-карта · лицевая',
+  idCardBack: 'ID-карта · обратная',
+  selfie: 'Селфи с документом',
+};
+
+const KYC_DOC_ALTS: Record<keyof DocumentUrls, string> = {
+  idCardFront: 'Лицевая сторона ID-карты',
+  idCardBack: 'Обратная сторона ID-карты',
+  selfie: 'Селфи с ID-картой',
+};
+
+function downloadBlobUrl(url: string, filename: string) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+}
+
 export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [data, setData] = useState<StaffDashboardData | null>(null);
   const [tab, setTab] = useState<Tab>('kyc');
@@ -770,9 +793,50 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
               <button type="button" onClick={closeDocuments} aria-label="Закрыть">×</button>
             </div>
             <div className="staff-kyc-modal__documents">
-              <figure><img src={documentUrls.idCardFront} alt="Лицевая сторона ID-карты" /><figcaption>ID-карта · лицевая</figcaption></figure>
-              <figure><img src={documentUrls.idCardBack} alt="Обратная сторона ID-карты" /><figcaption>ID-карта · обратная</figcaption></figure>
-              <figure><img src={documentUrls.selfie} alt="Селфи с ID-картой" /><figcaption>Селфи с документом</figcaption></figure>
+              {([
+                'idCardFront',
+                'idCardBack',
+                'selfie',
+              ] as const).map(docType => {
+                const prefix = onboardingDocument
+                  ? `tg_${onboardingDocument.telegramId}`
+                  : `client_${documentClient?.clientId || 'kyc'}`;
+                const filename = `kyc_${prefix}_${docType}.jpg`;
+                return (
+                  <figure key={docType}>
+                    <img src={documentUrls[docType]} alt={KYC_DOC_ALTS[docType]} />
+                    <figcaption>{KYC_DOC_LABELS[docType]}</figcaption>
+                    <button
+                      type="button"
+                      className="staff-kyc-modal__download"
+                      onClick={() => downloadBlobUrl(documentUrls[docType], filename)}
+                    >
+                      Скачать
+                    </button>
+                  </figure>
+                );
+              })}
+            </div>
+            <div className="staff-kyc-modal__download-all">
+              <button
+                type="button"
+                className="staff-kyc-modal__download staff-kyc-modal__download--all"
+                onClick={() => {
+                  const prefix = onboardingDocument
+                    ? `tg_${onboardingDocument.telegramId}`
+                    : `client_${documentClient?.clientId || 'kyc'}`;
+                  (['idCardFront', 'idCardBack', 'selfie'] as const).forEach((docType, index) => {
+                    window.setTimeout(() => {
+                      downloadBlobUrl(
+                        documentUrls[docType],
+                        `kyc_${prefix}_${docType}.jpg`,
+                      );
+                    }, index * 180);
+                  });
+                }}
+              >
+                Скачать все фото
+              </button>
             </div>
             {(onboardingDocument?.kycStatus === 'pending'
               || documentClient?.kycStatus === 'pending') ? (

@@ -667,10 +667,52 @@
 }
 
 .staff-kyc-modal__documents figcaption {
-  padding: 7px;
+  padding: 7px 7px 0;
   color: var(--text-muted);
   font-size: 10px;
   text-align: center;
+}
+
+.staff-kyc-modal__download {
+  display: block;
+  width: calc(100% - 14px);
+  margin: 8px 7px 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--brand-blue, var(--primary));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-kyc-modal__download:hover {
+  border-color: var(--brand-blue, var(--primary));
+  background: var(--brand-blue-soft, var(--bg));
+}
+
+.staff-kyc-modal__download:active {
+  opacity: 0.85;
+}
+
+.staff-kyc-modal__download-all {
+  margin-top: 12px;
+}
+
+.staff-kyc-modal__download--all {
+  width: 100%;
+  margin: 0;
+  padding: 11px 14px;
+  background: var(--brand-blue, var(--primary));
+  border-color: transparent;
+  color: #fff;
+  font-size: 13px;
+}
+
+.staff-kyc-modal__download--all:hover {
+  background: var(--primary-hover, var(--brand-blue-dark, #003d99));
+  border-color: transparent;
+  color: #fff;
 }
 
 .staff-kyc-modal__reason {
