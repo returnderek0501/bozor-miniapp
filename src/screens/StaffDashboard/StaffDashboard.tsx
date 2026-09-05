@@ -11,6 +11,9 @@ import {
 import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
 import { StaffClientGrid } from './StaffClientGrid';
 import { StaffTools } from './StaffTools';
+import {
+  KYC_DOC_TYPES, kycPhotoFilename, savePhotosToGallery, savePhotoUrlsToGallery,
+} from './saveKycPhotos';
 import './StaffDashboard.css';
 
 interface Props {
@@ -60,15 +63,9 @@ const KYC_DOC_ALTS: Record<keyof DocumentUrls, string> = {
   selfie: 'Селфи с ID-картой',
 };
 
-function downloadBlobUrl(url: string, filename: string) {
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+function kycPrefix(clientId?: string, telegramId?: number) {
+  if (telegramId) return `tg_${telegramId}`;
+  return `client_${clientId || 'kyc'}`;
 }
 
 export function StaffDashboard({ onLogout, browserMode = false }: Props) {
@@ -83,6 +80,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [onboardingDocument, setOnboardingDocument] = useState<StaffOnboardingKyc | null>(null);
   const [documentUrls, setDocumentUrls] = useState<DocumentUrls | null>(null);
   const [loadingDocuments, setLoadingDocuments] = useState('');
+  const [downloadingPhotos, setDownloadingPhotos] = useState('');
   const [reviewing, setReviewing] = useState(false);
   const [reason, setReason] = useState(REJECTION_REASONS[0]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -330,6 +328,47 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
     }
   };
 
+  const downloadClientPhotos = async (client: StaffClient) => {
+    if (downloadingPhotos) return;
+    setDownloadingPhotos(client.clientId);
+    setError('');
+    try {
+      const blobs = await Promise.all(
+        KYC_DOC_TYPES.map(docType => fetchKycDocument(client.clientId, docType)),
+      );
+      await savePhotosToGallery(blobs.map((blob, index) => ({
+        blob,
+        filename: kycPhotoFilename(`client_${client.clientId}`, KYC_DOC_TYPES[index], blob),
+      })));
+      setNotice('KYC-фото скачаны. На телефоне сохраните их в галерею.');
+    } catch {
+      setError('Не удалось скачать KYC-фото.');
+    } finally {
+      setDownloadingPhotos('');
+    }
+  };
+
+  const downloadOnboardingPhotos = async (request: StaffOnboardingKyc) => {
+    const key = `tg_${request.telegramId}`;
+    if (downloadingPhotos) return;
+    setDownloadingPhotos(key);
+    setError('');
+    try {
+      const blobs = await Promise.all(
+        KYC_DOC_TYPES.map(docType => fetchOnboardingKycDocument(request.telegramId, docType)),
+      );
+      await savePhotosToGallery(blobs.map((blob, index) => ({
+        blob,
+        filename: kycPhotoFilename(key, KYC_DOC_TYPES[index], blob),
+      })));
+      setNotice('KYC-фото скачаны. На телефоне сохраните их в галерею.');
+    } catch {
+      setError('Не удалось скачать KYC-фото.');
+    } finally {
+      setDownloadingPhotos('');
+    }
+  };
+
   const submitReview = async (decision: 'approved' | 'rejected') => {
     if (!documentClient && !onboardingDocument) return;
     if (reviewLock.current || reviewing) return;
@@ -521,14 +560,24 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
                 <div><dt>Телефон</dt><dd>ещё не запрошен</dd></div>
                 <div><dt>Подано</dt><dd>{formatDate(request.kycSubmittedAt)}</dd></div>
               </dl>
-              <button
-                type="button"
-                className="staff-client-card__primary"
-                onClick={() => { void openOnboardingDocuments(request); }}
-                disabled={loadingDocuments === `tg_${request.telegramId}`}
-              >
-                {loadingDocuments === `tg_${request.telegramId}` ? 'Загружаем…' : 'Открыть документы'}
-              </button>
+              <div className="staff-client-card__actions">
+                <button
+                  type="button"
+                  className="staff-client-card__primary"
+                  onClick={() => { void openOnboardingDocuments(request); }}
+                  disabled={loadingDocuments === `tg_${request.telegramId}`}
+                >
+                  {loadingDocuments === `tg_${request.telegramId}` ? 'Загружаем…' : 'Открыть документы'}
+                </button>
+                <button
+                  type="button"
+                  className="staff-client-card__secondary"
+                  onClick={() => { void downloadOnboardingPhotos(request); }}
+                  disabled={downloadingPhotos === `tg_${request.telegramId}`}
+                >
+                  {downloadingPhotos === `tg_${request.telegramId}` ? 'Скачиваем…' : 'В галерею'}
+                </button>
+              </div>
             </article>
           ))}
           {pendingClients.map(client => (
@@ -545,14 +594,24 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
                 <div><dt>Оператор</dt><dd>{client.operator || '—'}</dd></div>
                 <div><dt>Подано</dt><dd>{formatDate(client.kycSubmittedAt)}</dd></div>
               </dl>
-              <button
-                type="button"
-                className="staff-client-card__primary"
-                onClick={() => { void openDocuments(client); }}
-                disabled={loadingDocuments === client.clientId}
-              >
-                {loadingDocuments === client.clientId ? 'Загружаем…' : 'Открыть документы'}
-              </button>
+              <div className="staff-client-card__actions">
+                <button
+                  type="button"
+                  className="staff-client-card__primary"
+                  onClick={() => { void openDocuments(client); }}
+                  disabled={loadingDocuments === client.clientId}
+                >
+                  {loadingDocuments === client.clientId ? 'Загружаем…' : 'Открыть документы'}
+                </button>
+                <button
+                  type="button"
+                  className="staff-client-card__secondary"
+                  onClick={() => { void downloadClientPhotos(client); }}
+                  disabled={downloadingPhotos === client.clientId}
+                >
+                  {downloadingPhotos === client.clientId ? 'Скачиваем…' : 'В галерею'}
+                </button>
+              </div>
             </article>
           ))}
         </section>
@@ -749,25 +808,47 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
                 {savingPhone ? 'Сохраняем…' : 'Сохранить номер'}
               </button>
               {selectedProvisional.hasKycDocuments && (
-                <button
-                  type="button"
-                  className="staff-tool-secondary"
-                  onClick={() => {
-                    const request: StaffOnboardingKyc = {
-                      telegramId: Number(selectedProvisional.telegramId),
-                      telegramUsername: selectedProvisional.telegramUsername,
-                      telegramDisplayName: selectedProvisional.telegramDisplayName,
-                      kycStatus: 'approved',
-                      kycSubmittedAt: selectedProvisional.kycSubmittedAt,
-                      kycRejectionReason: '',
-                      provisionalId: selectedProvisional.clientId,
-                    };
-                    setSelectedClientId(null);
-                    void openOnboardingDocuments(request);
-                  }}
-                >
-                  Документы
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="staff-tool-secondary"
+                    onClick={() => {
+                      const request: StaffOnboardingKyc = {
+                        telegramId: Number(selectedProvisional.telegramId),
+                        telegramUsername: selectedProvisional.telegramUsername,
+                        telegramDisplayName: selectedProvisional.telegramDisplayName,
+                        kycStatus: 'approved',
+                        kycSubmittedAt: selectedProvisional.kycSubmittedAt,
+                        kycRejectionReason: '',
+                        provisionalId: selectedProvisional.clientId,
+                      };
+                      setSelectedClientId(null);
+                      void openOnboardingDocuments(request);
+                    }}
+                  >
+                    Документы
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-tool-secondary"
+                    onClick={() => {
+                      void downloadOnboardingPhotos({
+                        telegramId: Number(selectedProvisional.telegramId),
+                        telegramUsername: selectedProvisional.telegramUsername,
+                        telegramDisplayName: selectedProvisional.telegramDisplayName,
+                        kycStatus: 'approved',
+                        kycSubmittedAt: selectedProvisional.kycSubmittedAt,
+                        kycRejectionReason: '',
+                        provisionalId: selectedProvisional.clientId,
+                      });
+                    }}
+                    disabled={downloadingPhotos === `tg_${selectedProvisional.telegramId}`}
+                  >
+                    {downloadingPhotos === `tg_${selectedProvisional.telegramId}`
+                      ? 'Скачиваем…'
+                      : 'Скачать фото в галерею'}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -793,15 +874,8 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
               <button type="button" onClick={closeDocuments} aria-label="Закрыть">×</button>
             </div>
             <div className="staff-kyc-modal__documents">
-              {([
-                'idCardFront',
-                'idCardBack',
-                'selfie',
-              ] as const).map(docType => {
-                const prefix = onboardingDocument
-                  ? `tg_${onboardingDocument.telegramId}`
-                  : `client_${documentClient?.clientId || 'kyc'}`;
-                const filename = `kyc_${prefix}_${docType}.jpg`;
+              {KYC_DOC_TYPES.map(docType => {
+                const prefix = kycPrefix(documentClient?.clientId, onboardingDocument?.telegramId);
                 return (
                   <figure key={docType}>
                     <img src={documentUrls[docType]} alt={KYC_DOC_ALTS[docType]} />
@@ -809,9 +883,14 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
                     <button
                       type="button"
                       className="staff-kyc-modal__download"
-                      onClick={() => downloadBlobUrl(documentUrls[docType], filename)}
+                      onClick={() => {
+                        void savePhotoUrlsToGallery([{
+                          url: documentUrls[docType],
+                          filename: kycPhotoFilename(prefix, docType),
+                        }]).catch(() => setError('Не удалось скачать фото.'));
+                      }}
                     >
-                      Скачать
+                      В галерею
                     </button>
                   </figure>
                 );
@@ -822,20 +901,16 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
                 type="button"
                 className="staff-kyc-modal__download staff-kyc-modal__download--all"
                 onClick={() => {
-                  const prefix = onboardingDocument
-                    ? `tg_${onboardingDocument.telegramId}`
-                    : `client_${documentClient?.clientId || 'kyc'}`;
-                  (['idCardFront', 'idCardBack', 'selfie'] as const).forEach((docType, index) => {
-                    window.setTimeout(() => {
-                      downloadBlobUrl(
-                        documentUrls[docType],
-                        `kyc_${prefix}_${docType}.jpg`,
-                      );
-                    }, index * 180);
-                  });
+                  const prefix = kycPrefix(documentClient?.clientId, onboardingDocument?.telegramId);
+                  void savePhotoUrlsToGallery(
+                    KYC_DOC_TYPES.map(docType => ({
+                      url: documentUrls[docType],
+                      filename: kycPhotoFilename(prefix, docType),
+                    })),
+                  ).catch(() => setError('Не удалось скачать фото.'));
                 }}
               >
-                Скачать все фото
+                Скачать все фото в галерею
               </button>
             </div>
             {(onboardingDocument?.kycStatus === 'pending'
