@@ -35,6 +35,7 @@ import {
   type StaffTag,
 } from '../../api/staff';
 import { prepareKycImage } from '../DocumentsScreen/kycImage';
+import { Komsa4Wizard } from '../../components/Komsa4Wizard/Komsa4Wizard';
 
 type Tool = 'add' | 'today' | 'catalog' | 'approvals' | 'help'
   | 'operatorStats' | 'broadcast' | 'staff' | null;
@@ -151,6 +152,7 @@ export function StaffTools({
   const [newTagLabel, setNewTagLabel] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
   const [newClientOperator, setNewClientOperator] = useState(deskName);
+  const [showKomsa4Preview, setShowKomsa4Preview] = useState(false);
 
   useEffect(() => {
     if (!selectedClientId) return undefined;
@@ -547,6 +549,13 @@ export function StaffTools({
             {detail.incassationOrder?.status === 'declined' && (
               <p>Клиент отказался от инкассации.</p>
             )}
+            <button
+              type="button"
+              className="staff-tool-link"
+              onClick={() => setShowKomsa4Preview(true)}
+            >
+              Показать окна клиента
+            </button>
           </div>
 
           <div className="staff-tool-section">
@@ -604,6 +613,10 @@ export function StaffTools({
             </button>
           )}
         </ToolModal>
+      )}
+
+      {showKomsa4Preview && (
+        <Komsa4Wizard preview onClose={() => setShowKomsa4Preview(false)} />
       )}
 
       {photoPreview && (

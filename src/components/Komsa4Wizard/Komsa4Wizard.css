@@ -1,3 +1,7 @@
+.komsa4-wizard-overlay {
+  z-index: 1200;
+}
+
 .komsa4-wizard .withdraw-modal__submit {
   width: 100%;
 }

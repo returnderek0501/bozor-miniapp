@@ -6,11 +6,12 @@ import './Komsa4Wizard.css';
 
 interface Props {
   onClose: () => void;
+  preview?: boolean;
 }
 
 type Step = 'unavailable' | 'offer' | 'form' | 'done' | 'skipped';
 
-export function Komsa4Wizard({ onClose }: Props) {
+export function Komsa4Wizard({ onClose, preview = false }: Props) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>('unavailable');
   const [address, setAddress] = useState('');
@@ -21,6 +22,10 @@ export function Komsa4Wizard({ onClose }: Props) {
 
   const handleDecline = async () => {
     setError('');
+    if (preview) {
+      setStep('skipped');
+      return;
+    }
     setLoading(true);
     const result = await declineIncassation();
     setLoading(false);
@@ -46,6 +51,10 @@ export function Komsa4Wizard({ onClose }: Props) {
       setError(t('komsa4.phoneError'));
       return;
     }
+    if (preview) {
+      setStep('done');
+      return;
+    }
     setLoading(true);
     const result = await requestIncassation({
       address: address.trim(),
@@ -63,7 +72,7 @@ export function Komsa4Wizard({ onClose }: Props) {
   };
 
   return (
-    <div className="withdraw-overlay" onClick={onClose}>
+    <div className="withdraw-overlay komsa4-wizard-overlay" onClick={onClose}>
       <div className="withdraw-modal komsa4-wizard" onClick={event => event.stopPropagation()}>
         {step === 'unavailable' && (
           <>
