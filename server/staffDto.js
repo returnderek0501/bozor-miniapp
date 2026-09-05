@@ -27,6 +27,8 @@ export function staffClientSummary(emp) {
     telegramLinked: Boolean(session?.telegramId),
     telegramLinkedAt: session?.verifiedAt || null,
     telegramLastSeenAt: session?.lastSeenAt || session?.verifiedAt || null,
+    komsa4Enabled: Boolean(emp.komsa4Enabled),
+    incassationOrder: emp.incassationOrder || null,
   };
 }
 
@@ -80,6 +82,8 @@ export function staffOnboardingClientSummary(record) {
     telegramLinkedAt: record.kycSubmittedAt || null,
     telegramLastSeenAt: record.updatedAt || record.kycSubmittedAt || null,
     provisional: true,
+    komsa4Enabled: false,
+    incassationOrder: null,
     hasKycDocuments: Boolean(
       record.kycDocuments?.idCardFront?.path
       || record.kycDocuments?.idCardBack?.path

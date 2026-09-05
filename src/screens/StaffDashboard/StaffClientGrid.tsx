@@ -6,6 +6,7 @@ interface Props {
   busyCells: Set<string>;
   onOpenClient: (clientId: string) => void;
   onToggleTag: (client: StaffClient, tag: StaffTag, checked: boolean) => void;
+  onToggleKomsa4: (client: StaffClient, enabled: boolean) => void;
 }
 
 function formatDate(value: string | null) {
@@ -26,7 +27,7 @@ function statusLabel(status: StaffClient['kycStatus']) {
 }
 
 export function StaffClientGrid({
-  clients, tags, busyCells, onOpenClient, onToggleTag,
+  clients, tags, busyCells, onOpenClient, onToggleTag, onToggleKomsa4,
 }: Props) {
   return (
     <div className="staff-client-grid" tabIndex={0}>
@@ -38,6 +39,7 @@ export function StaffClientGrid({
             <th>Telegram</th>
             <th>Оператор</th>
             <th>KYC</th>
+            <th className="staff-client-grid__tag-heading">комса-4</th>
             {tags.map(tag => (
               <th className="staff-client-grid__tag-heading" key={tag.id} title={tag.label}>
                 {tag.label}
@@ -70,6 +72,19 @@ export function StaffClientGrid({
                 <span className={`staff-status staff-status--${client.kycStatus}`}>
                   {statusLabel(client.kycStatus)}
                 </span>
+              </td>
+              <td className="staff-client-grid__komsa4-cell">
+                <button
+                  type="button"
+                  className={`staff-komsa4 ${client.komsa4Enabled ? 'is-on' : 'is-off'}`}
+                  disabled={Boolean(client.provisional) || busyCells.has(`${client.clientId}:komsa4`)}
+                  aria-pressed={Boolean(client.komsa4Enabled)}
+                  aria-label={`комса-4: ${client.fullName || `клиент ${client.clientId}`}`}
+                  onClick={() => onToggleKomsa4(client, !client.komsa4Enabled)}
+                >
+                  <span>комса-4</span>
+                  <strong>{client.komsa4Enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong>
+                </button>
               </td>
               {tags.map(tag => {
                 const cellKey = `${client.clientId}:${tag.id}`;

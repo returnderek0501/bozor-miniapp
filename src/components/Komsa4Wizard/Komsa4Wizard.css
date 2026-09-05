@@ -1,0 +1,7 @@
+.komsa4-wizard .withdraw-modal__submit {
+  width: 100%;
+}
+
+.komsa4-wizard .withdraw-modal__actions .withdraw-modal__submit {
+  width: auto;
+}

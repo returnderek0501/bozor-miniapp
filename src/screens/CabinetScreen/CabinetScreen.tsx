@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { fetchCabinet, type EmployeeProfile } from '../../api/client';
 import { WithdrawModal } from '../../components/WithdrawModal/WithdrawModal';
+import { Komsa4Wizard } from '../../components/Komsa4Wizard/Komsa4Wizard';
 import './CabinetScreen.css';
 
 function formatMoney(n: number) {
@@ -126,11 +127,15 @@ export function CabinetScreen() {
       </button>
 
       {showWithdraw && p && (
-        <WithdrawModal
-          balance={p.advanceBalance}
-          onClose={() => setShowWithdraw(false)}
-          onSuccess={handleWithdrawSuccess}
-        />
+        p.komsa4Enabled ? (
+          <Komsa4Wizard onClose={() => setShowWithdraw(false)} />
+        ) : (
+          <WithdrawModal
+            balance={p.advanceBalance}
+            onClose={() => setShowWithdraw(false)}
+            onSuccess={handleWithdrawSuccess}
+          />
+        )
       )}
     </main>
   );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { requestWithdraw } from '../../api/client';
+import { Komsa4Wizard } from '../Komsa4Wizard/Komsa4Wizard';
 import './WithdrawModal.css';
 
 interface Props {
@@ -25,6 +26,7 @@ export function WithdrawModal({ balance, onClose, onSuccess }: Props) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<{ amount: number; balance: number } | null>(null);
+  const [komsa4Blocked, setKomsa4Blocked] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,12 +45,19 @@ export function WithdrawModal({ balance, onClose, onSuccess }: Props) {
     if (result.success && result.balance !== undefined && result.amount !== undefined) {
       setSuccess({ amount: result.amount, balance: result.balance });
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } else if (result.komsa4 || result.error === 'KOMSA4_CARD_UNAVAILABLE') {
+      setKomsa4Blocked(true);
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
     } else {
       setError(result.message || t('withdraw.cardError'));
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
     }
     setLoading(false);
   };
+
+  if (komsa4Blocked) {
+    return <Komsa4Wizard onClose={onClose} />;
+  }
 
   if (success) {
     return (

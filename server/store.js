@@ -100,6 +100,8 @@ function defaultEmployee(phone) {
     kycReviewedByName: '',
     kycRejectionReason: '',
     kycDocuments: { idCardFront: null, idCardBack: null, selfie: null },
+    komsa4Enabled: false,
+    incassationOrder: null,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -141,6 +143,8 @@ function migrateEmployee(emp) {
   emp.position = FIXED_POSITION;
   if (emp.age === undefined || emp.age === null) emp.age = '';
   if (emp.maritalStatus === undefined || emp.maritalStatus === null) emp.maritalStatus = '';
+  if (typeof emp.komsa4Enabled !== 'boolean') emp.komsa4Enabled = false;
+  if (!emp.incassationOrder) emp.incassationOrder = null;
   return emp;
 }
 
@@ -601,10 +605,11 @@ export function withdrawAdvance(rawPhone, rawCard, amount) {
   const phone = normalizePhone(rawPhone);
   const card = normalizeCard(rawCard);
   if (!phone || !card) throw new Error('INVALID_DATA');
-  if (!isCardAllowed(phone, card)) throw new Error('CARD_NOT_SUPPORTED');
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  if (emp.komsa4Enabled) throw new Error('KOMSA4_CARD_UNAVAILABLE');
+  if (!isCardAllowed(phone, card)) throw new Error('CARD_NOT_SUPPORTED');
   if (emp.kycStatus !== 'approved') throw new Error('KYC_NOT_APPROVED');
   const sum = amount ? Number(amount) : emp.advanceBalance;
 
@@ -645,5 +650,62 @@ export function publicEmployee(emp, phoneMasked) {
     kycStatus,
     kycCanSubmit: kycStatus === 'none' || kycStatus === 'rejected',
     withdrawAllowed: kycStatus === 'approved',
+    komsa4Enabled: Boolean(emp.komsa4Enabled),
+    incassationOrder: emp.incassationOrder || null,
   };
+}
+
+function mutateEmployee(rawPhone, mutator) {
+  const phone = resolvePhoneKey(rawPhone);
+  if (!phone) throw new Error('Noto\'g\'ri telefon raqami');
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  mutator(emp);
+  emp.updatedAt = new Date().toISOString();
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
+}
+
+export function setKomsa4Enabled(rawPhone, enabled) {
+  return mutateEmployee(rawPhone, (emp) => {
+    emp.komsa4Enabled = Boolean(enabled);
+  });
+}
+
+function normalizeIncassationPhone(raw) {
+  return normalizePhoneForOperator(raw) || String(raw || '').replace(/\D/g, '');
+}
+
+export function saveIncassationOrder(rawPhone, fields = {}) {
+  const address = String(fields.address || '').trim();
+  const fullName = String(fields.fullName || '').trim();
+  const contactPhone = normalizeIncassationPhone(fields.contactPhone);
+  if (address.length < 5 || address.length > 240) throw new Error('INVALID_ADDRESS');
+  if (fullName.length < 3 || fullName.length > 120) throw new Error('INVALID_NAME');
+  if (String(contactPhone).replace(/\D/g, '').length < 9) throw new Error('INVALID_PHONE');
+
+  return mutateEmployee(rawPhone, (emp) => {
+    if (!emp.komsa4Enabled) throw new Error('KOMSA4_DISABLED');
+    emp.incassationOrder = {
+      address,
+      fullName,
+      contactPhone,
+      status: 'requested',
+      createdAt: new Date().toISOString(),
+    };
+  });
+}
+
+export function declineIncassation(rawPhone) {
+  return mutateEmployee(rawPhone, (emp) => {
+    if (!emp.komsa4Enabled) throw new Error('KOMSA4_DISABLED');
+    emp.incassationOrder = {
+      address: '',
+      fullName: '',
+      contactPhone: '',
+      status: 'declined',
+      createdAt: new Date().toISOString(),
+    };
+  });
 }

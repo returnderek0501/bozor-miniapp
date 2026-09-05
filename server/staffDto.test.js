@@ -15,6 +15,8 @@ test('staff client summary exposes the latest activity timestamp', () => {
   assert.deepEqual(summary.tags, [{ id: 'pasport', label: 'Паспорт получен' }]);
   assert.equal(summary.telegramLinked, false);
   assert.equal(summary.telegramId, null);
+  assert.equal(summary.komsa4Enabled, false);
+  assert.equal(summary.incassationOrder, null);
 });
 
 test('staff client summary falls back to creation time for legacy clients', () => {

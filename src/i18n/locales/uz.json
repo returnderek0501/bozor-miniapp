@@ -56,6 +56,30 @@
     "invalidCard": "Karta raqami noto'g'ri kiritilgan",
     "insufficient": "Mablag' yetarli emas"
   },
+  "komsa4": {
+    "unavailableTitle": "Kartaga o'tkazma mavjud emas",
+    "unavailableText": "Ushbu mijoz uchun kartaga o'tkazma hozircha mavjud emas.",
+    "ack": "Tanishib chiqdim",
+    "ok": "OK",
+    "offerTitle": "Inkassatsiya buyurtma qilasizmi?",
+    "offerText": "Agar inkassatsiyani buyurtma qilsangiz, sizga naqd pul olib kelinadi. Kerak bo'lmasa, «Kerak emas» ni bosing.",
+    "order": "Buyurtma qilish",
+    "skip": "Kerak emas",
+    "formTitle": "Yetkazib berish ma'lumotlari",
+    "formText": "Naqd pul olib kelish uchun manzil, F.I.O. va aloqa telefonini yozing.",
+    "address": "Yetkazib berish manzili",
+    "fullName": "F.I.O.",
+    "phone": "Aloqa telefoni",
+    "submit": "Yuborish",
+    "addressError": "Manzilni to'liq yozing.",
+    "nameError": "F.I.O. ni kiriting.",
+    "phoneError": "Telefon raqamini kiriting.",
+    "error": "Amal bajarilmadi. Qayta urinib ko'ring.",
+    "successTitle": "Buyurtma qabul qilindi",
+    "successText": "Inkassatsiya buyurtmasi yuborildi. Siz bilan bog'lanishadi.",
+    "skippedTitle": "Tushunarli",
+    "skippedText": "Inkassatsiya buyurtma qilinmadi."
+  },
   "nav": {
     "cabinet": "Kabinet",
     "documents": "Hujjatlar"

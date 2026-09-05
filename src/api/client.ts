@@ -39,6 +39,7 @@ export interface EmployeeProfile {
   kycStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   kycCanSubmit?: boolean;
   withdrawAllowed?: boolean;
+  komsa4Enabled?: boolean;
 }
 
 export interface KycSubmitResult {
@@ -62,6 +63,23 @@ export interface WithdrawResult {
   amount?: number;
   balance?: number;
   card?: string;
+  komsa4?: boolean;
+  error?: string;
+}
+
+export interface IncassationOrder {
+  address: string;
+  fullName: string;
+  contactPhone: string;
+  status: 'requested' | 'declined';
+  createdAt: string;
+}
+
+export interface IncassationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  incassationOrder?: IncassationOrder | null;
 }
 
 export async function checkAuthStatus(): Promise<AuthStatus> {
@@ -165,7 +183,41 @@ export async function requestWithdraw(cardNumber: string, amount?: number): Prom
   });
   const data = await res.json();
   if (!res.ok) {
-    return { success: false, message: data.message };
+    return {
+      success: false,
+      message: data.message,
+      komsa4: Boolean(data.komsa4),
+      error: data.error,
+    };
+  }
+  return data;
+}
+
+export async function requestIncassation(fields: {
+  address: string;
+  fullName: string;
+  contactPhone: string;
+}): Promise<IncassationResult> {
+  const res = await fetch('/api/incassation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(fields),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { success: false, message: data.message, error: data.error };
+  }
+  return data;
+}
+
+export async function declineIncassation(): Promise<IncassationResult> {
+  const res = await fetch('/api/incassation/decline', {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { success: false, message: data.message, error: data.error };
   }
   return data;
 }

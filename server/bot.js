@@ -6,6 +6,7 @@ import {
   setEmployeeOperator,
   listTelegramIdsForPhones, getTelegramIdByPhone,
   setKycStatus, getSession, isPhoneAllowed, applyApprovedKyc,
+  setKomsa4Enabled,
 } from './store.js';
 import { isAdmin, listAdmins, addAdmin, isEnvAdmin } from './admins.js';
 import { listOperators, addOperatorByTelegramId } from './operators.js';
@@ -294,6 +295,7 @@ function clientOperatorPickerKeyboard(phone, telegramId) {
 
 function employeeActionsKeyboard(phone, telegramId) {
   const digits = phoneDigits(phone);
+  const emp = getEmployee(phone);
   const rows = [
     [
       { text: '✏️ Данные', callback_data: `edit_cl:${digits}` },
@@ -308,6 +310,9 @@ function employeeActionsKeyboard(phone, telegramId) {
     ],
     [
       { text: '🪪 KYC', callback_data: `kyc_view:${digits}` },
+    ],
+    [
+      { text: emp.komsa4Enabled ? 'комса-4: ВКЛ' : 'комса-4: ВЫКЛ', callback_data: `komsa4:${digits}` },
     ],
   ];
   if (isAdmin(telegramId)) {
@@ -416,8 +421,12 @@ function formatEmployee(emp) {
     `Семейное положение: ${emp.maritalStatus || '—'}`,
     `ID кабинета: ${emp.employeeId || '—'}`,
     `Аванс: ${formatMoney(emp.advanceBalance)} сум`,
+    `комса-4: <b>${emp.komsa4Enabled ? 'ВКЛ' : 'ВЫКЛ'}</b>`,
+    emp.incassationOrder?.status === 'requested'
+      ? `Инкассация: ${emp.incassationOrder.fullName}, ${emp.incassationOrder.contactPhone}, ${emp.incassationOrder.address}`
+      : emp.incassationOrder?.status === 'declined' ? 'Инкассация: клиент отказался' : '',
     `Добавлен: ${emp.createdAt ? formatTagTime(emp.createdAt) : '—'}`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function formatEmployeesList(telegramId) {
@@ -1491,6 +1500,19 @@ async function handleCallback(bot, query) {
       } else {
         await bot.sendMessage(chatId, formatEmployee(emp), employeeActionsKeyboard(phone, fromId));
       }
+    } catch (e) {
+      await bot.answerCallbackQuery(query.id, e.message);
+    }
+    return;
+  }
+
+  if (data.startsWith('komsa4:')) {
+    const phone = `+${data.slice(7)}`;
+    try {
+      const emp = requireClientAccess(fromId, phone);
+      const updated = setKomsa4Enabled(phone, !emp.komsa4Enabled);
+      await bot.answerCallbackQuery(query.id, updated.komsa4Enabled ? 'комса-4: ВКЛ' : 'комса-4: ВЫКЛ');
+      await bot.sendMessage(chatId, formatEmployee(updated), employeeActionsKeyboard(phone, fromId));
     } catch (e) {
       await bot.answerCallbackQuery(query.id, e.message);
     }

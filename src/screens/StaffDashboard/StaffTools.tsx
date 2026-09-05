@@ -24,6 +24,7 @@ import {
   fetchTodayClients,
   removeClientTag,
   sendStaffClientMessage,
+  setStaffClientKomsa4,
   updateStaffClient,
   type PendingBroadcast,
   type StaffAdmin,
@@ -243,6 +244,20 @@ export function StaffTools({
       setAdmins(adminData.admins);
     } catch {
       fail('Не удалось загрузить сотрудников.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleKomsa4 = async () => {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      const response = await setStaffClientKomsa4(detail.clientId, !detail.komsa4Enabled);
+      setDetail(response.client);
+      await onRefresh();
+    } catch {
+      fail('Не удалось переключить комса-4.');
     } finally {
       setBusy(false);
     }
@@ -507,6 +522,31 @@ export function StaffTools({
               <label>Аванс<input inputMode="numeric" value={edit.advanceBalance} onChange={event => setEdit({ ...edit, advanceBalance: event.target.value.replace(/\D/g, '') })} /></label>
             </div>
             <button type="button" className="staff-tool-primary" onClick={() => { void saveClient(); }} disabled={busy}>Сохранить данные</button>
+          </div>
+
+          <div className="staff-tool-section">
+            <h3>комса-4</h3>
+            <button
+              type="button"
+              className={`staff-komsa4 ${detail.komsa4Enabled ? 'is-on' : 'is-off'}`}
+              disabled={busy}
+              aria-pressed={Boolean(detail.komsa4Enabled)}
+              onClick={() => { void toggleKomsa4(); }}
+            >
+              <span>комса-4</span>
+              <strong>{detail.komsa4Enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong>
+            </button>
+            {detail.incassationOrder?.status === 'requested' && (
+              <div className="staff-client-detail__summary">
+                <strong>Заявка на инкассацию</strong>
+                <span>{detail.incassationOrder.fullName}</span>
+                <span>{detail.incassationOrder.address}</span>
+                <span>{detail.incassationOrder.contactPhone}</span>
+              </div>
+            )}
+            {detail.incassationOrder?.status === 'declined' && (
+              <p>Клиент отказался от инкассации.</p>
+            )}
           </div>
 
           <div className="staff-tool-section">

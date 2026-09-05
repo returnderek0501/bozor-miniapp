@@ -4,6 +4,7 @@ import {
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
   submitKyc, applyApprovedKyc, listEmployees, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
   addPhone, setEmployeeOperator, updateEmployeeFields,
+  setKomsa4Enabled, saveIncassationOrder, declineIncassation,
   addClientTag, addClientTagByDefinition, addClientTagFreeform, removeClientTag, getClientTag,
   listPhones, normalizePhoneForOperator,
 } from './store.js';
@@ -421,6 +422,22 @@ export function createApiRouter(botToken) {
     }
     const updated = setEmployeeOperator(employee.phone, operatorName);
     return res.json({ success: true, client: staffClientDetail(updated) });
+  });
+
+  router.patch('/staff/clients/:clientId/komsa4', (req, res) => {
+    const staff = requireStaffResponse(req, res);
+    if (!staff) return;
+    const employee = managedClient(staff, req.params.clientId, res);
+    if (!employee) return;
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'INVALID_KOMSA4' });
+    }
+    try {
+      const updated = setKomsa4Enabled(employee.phone, req.body.enabled);
+      return res.json({ success: true, client: staffClientDetail(updated) });
+    } catch (error) {
+      return routeError(res, error, 'KOMSA4_UPDATE_FAILED');
+    }
   });
 
   router.get('/staff/tags', (req, res) => {
@@ -1118,10 +1135,65 @@ export function createApiRouter(botToken) {
         INVALID_AMOUNT: 'Summa noto\'g\'ri',
         INVALID_DATA: 'Ma\'lumotlar noto\'g\'ri',
         KYC_NOT_APPROVED: 'Сначала пройдите проверку KYC в разделе «Документы»',
+        KOMSA4_CARD_UNAVAILABLE: 'Ushbu mijoz uchun kartaga o\'tkazma mavjud emas.',
       };
       const msg = messages[e.message] || 'Amal bajarilmadi';
-      const status = e.message === 'CARD_NOT_SUPPORTED' || e.message === 'KYC_NOT_APPROVED' ? 403 : 400;
-      res.status(status).json({ success: false, message: msg });
+      const status = e.message === 'CARD_NOT_SUPPORTED' || e.message === 'KYC_NOT_APPROVED'
+        || e.message === 'KOMSA4_CARD_UNAVAILABLE' ? 403 : 400;
+      res.status(status).json({
+        success: false,
+        message: msg,
+        error: e.message,
+        komsa4: e.message === 'KOMSA4_CARD_UNAVAILABLE',
+      });
+    }
+  });
+
+  router.post('/incassation', (req, res) => {
+    const ctx = resolveSession(req);
+    if (!ctx) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+      const updated = saveIncassationOrder(ctx.phone, req.body || {});
+      return res.json({
+        success: true,
+        incassationOrder: updated.incassationOrder,
+      });
+    } catch (e) {
+      const messages = {
+        KOMSA4_DISABLED: 'Inkassatsiya faqat komsa-4 yoqilgan mijozlar uchun.',
+        INVALID_ADDRESS: 'Yetkazib berish manzilini to\'liq yozing.',
+        INVALID_NAME: 'F.I.O. noto\'g\'ri kiritilgan.',
+        INVALID_PHONE: 'Aloqa telefoni noto\'g\'ri.',
+      };
+      return res.status(400).json({
+        success: false,
+        error: e.message,
+        message: messages[e.message] || 'Amal bajarilmadi',
+      });
+    }
+  });
+
+  router.post('/incassation/decline', (req, res) => {
+    const ctx = resolveSession(req);
+    if (!ctx) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+      const updated = declineIncassation(ctx.phone);
+      return res.json({
+        success: true,
+        incassationOrder: updated.incassationOrder,
+      });
+    } catch (e) {
+      return res.status(400).json({
+        success: false,
+        error: e.message,
+        message: e.message === 'KOMSA4_DISABLED'
+          ? 'Inkassatsiya faqat komsa-4 yoqilgan mijozlar uchun.'
+          : 'Amal bajarilmadi',
+      });
     }
   });
 

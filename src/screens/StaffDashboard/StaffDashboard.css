@@ -446,6 +446,58 @@
   outline-offset: 2px;
 }
 
+.staff-client-grid__komsa4-cell {
+  text-align: center;
+}
+
+.staff-komsa4 {
+  display: inline-grid;
+  min-width: 76px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text-muted);
+  line-height: 1.15;
+  cursor: pointer;
+}
+
+.staff-komsa4 span {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.staff-komsa4 strong {
+  font-size: 13px;
+}
+
+.staff-komsa4.is-on {
+  border-color: #1a7f37;
+  background: #e5f6e9;
+  color: #1a7f37;
+}
+
+.staff-komsa4.is-off {
+  border-color: var(--border);
+}
+
+.staff-komsa4:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+[data-theme="dark"] .staff-komsa4.is-on {
+  background: #102819;
+  color: #71d68b;
+}
+
+.staff-tool-section .staff-komsa4 {
+  min-width: 120px;
+  margin-bottom: 10px;
+}
+
 .staff-client-grid__activity {
   color: var(--text-muted);
   font-size: 11px;

@@ -65,6 +65,14 @@ export interface StaffClient {
   kycReviewedByName?: string;
   hasKycDocuments?: boolean;
   provisional?: boolean;
+  komsa4Enabled?: boolean;
+  incassationOrder?: {
+    address?: string;
+    fullName?: string;
+    contactPhone?: string;
+    status: 'requested' | 'declined';
+    createdAt: string;
+  } | null;
 }
 
 export interface StaffDashboardData {
@@ -256,6 +264,16 @@ export function updateStaffClient(
   return jsonRequest(`/api/staff/clients/${encodeURIComponent(clientId)}`, {
     method: 'PATCH',
     body: JSON.stringify(fields),
+  });
+}
+
+export function setStaffClientKomsa4(
+  clientId: string,
+  enabled: boolean,
+): Promise<{ success: boolean; client: StaffClient }> {
+  return jsonRequest(`/api/staff/clients/${encodeURIComponent(clientId)}/komsa4`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
   });
 }
 

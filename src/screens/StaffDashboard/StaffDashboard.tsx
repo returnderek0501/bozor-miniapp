@@ -6,6 +6,7 @@ import {
   fetchOnboardingKycRequest,
   fetchStaffDashboard, fetchStaffTags, removeClientTag, reviewKyc,
   reviewOnboardingKyc, assignOnboardingPhone, selectDeskOperator,
+  setStaffClientKomsa4,
   type StaffClient, type StaffDashboardData, type StaffOnboardingKyc, type StaffTag,
 } from '../../api/staff';
 import { ThemeToggle } from '../../components/ThemeToggle/ThemeToggle';
@@ -229,6 +230,31 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
     } catch {
       setError(checked ? 'Не удалось присвоить тег.' : 'Не удалось снять тег.');
+    } finally {
+      setBusyTagCells(current => {
+        const next = new Set(current);
+        next.delete(cellKey);
+        return next;
+      });
+    }
+  };
+
+  const toggleKomsa4 = async (client: StaffClient, enabled: boolean) => {
+    if (client.provisional) return;
+    const cellKey = `${client.clientId}:komsa4`;
+    if (busyTagCells.has(cellKey)) return;
+    setBusyTagCells(current => new Set(current).add(cellKey));
+    try {
+      const response = await setStaffClientKomsa4(client.clientId, enabled);
+      setData(current => current ? {
+        ...current,
+        clients: current.clients.map(item => (
+          item.clientId === client.clientId ? { ...item, ...response.client } : item
+        )),
+      } : current);
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    } catch {
+      setError('Не удалось переключить комса-4.');
     } finally {
       setBusyTagCells(current => {
         const next = new Set(current);
@@ -650,6 +676,9 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
             }}
             onToggleTag={(client, tag, checked) => {
               void toggleClientTag(client, tag, checked);
+            }}
+            onToggleKomsa4={(client, enabled) => {
+              void toggleKomsa4(client, enabled);
             }}
           />
         </section>
