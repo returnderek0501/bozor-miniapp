@@ -15,6 +15,7 @@ import {
   deleteStaffTag,
   downloadStaffExport,
   fetchClientTagPhoto,
+  fetchKycDocument,
   fetchPendingBroadcasts,
   fetchStaffAdmins,
   fetchStaffClient,
@@ -34,6 +35,7 @@ import {
   type StaffTag,
 } from '../../api/staff';
 import { prepareKycImage } from '../DocumentsScreen/kycImage';
+import { KYC_DOC_TYPES, kycPhotoFilename, savePhotosToGallery } from './saveKycPhotos';
 
 type Tool = 'add' | 'today' | 'catalog' | 'approvals' | 'help'
   | 'operatorStats' | 'broadcast' | 'staff' | null;
@@ -150,6 +152,7 @@ export function StaffTools({
   const [newTagLabel, setNewTagLabel] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
   const [newClientOperator, setNewClientOperator] = useState(deskName);
+  const [downloadingKyc, setDownloadingKyc] = useState(false);
 
   useEffect(() => {
     if (!selectedClientId) return undefined;
@@ -245,6 +248,25 @@ export function StaffTools({
       fail('Не удалось загрузить сотрудников.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const downloadKycPhotos = async () => {
+    if (!detail) return;
+    setDownloadingKyc(true);
+    try {
+      const blobs = await Promise.all(
+        KYC_DOC_TYPES.map(docType => fetchKycDocument(detail.clientId, docType)),
+      );
+      await savePhotosToGallery(blobs.map((blob, index) => ({
+        blob,
+        filename: kycPhotoFilename(`client_${detail.clientId}`, KYC_DOC_TYPES[index], blob),
+      })));
+      onNotice('KYC-фото скачаны. На телефоне сохраните их в галерею.');
+    } catch {
+      fail('Не удалось скачать KYC-фото.');
+    } finally {
+      setDownloadingKyc(false);
     }
   };
 
@@ -559,9 +581,19 @@ export function StaffTools({
           </div>
 
           {detail.hasKycDocuments && (
-            <button type="button" className="staff-tool-secondary" onClick={() => onOpenKyc(detail)}>
-              Открыть KYC-документы
-            </button>
+            <div className="staff-kyc-card-actions">
+              <button type="button" className="staff-tool-secondary" onClick={() => onOpenKyc(detail)}>
+                Открыть KYC-документы
+              </button>
+              <button
+                type="button"
+                className="staff-tool-secondary"
+                onClick={() => { void downloadKycPhotos(); }}
+                disabled={downloadingKyc}
+              >
+                {downloadingKyc ? 'Скачиваем…' : 'Скачать фото в галерею'}
+              </button>
+            </div>
           )}
         </ToolModal>
       )}
