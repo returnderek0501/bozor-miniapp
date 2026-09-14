@@ -73,11 +73,15 @@ function slugify(label) {
 export { slugify };
 
 export function addTag(label, customId, actor = null) {
-  const trimmed = String(label || '').trim();
+  if (typeof label !== 'string') throw new Error('Название тега должно быть строкой');
+  const trimmed = label.trim();
   if (!trimmed) throw new Error('Название тега не может быть пустым');
+  if (trimmed.length > 80) throw new Error('Название тега слишком длинное');
 
   const tags = listTags();
+  if (customId != null && typeof customId !== 'string') throw new Error('ID тега должен быть строкой');
   const id = customId?.trim() || slugify(trimmed);
+  if (id.length > 64) throw new Error('ID тега слишком длинный');
   if (tags.some(t => t.id === id)) throw new Error(`Тег уже есть: ${id}`);
 
   const isGlobal = !actor || actor.isAdmin;

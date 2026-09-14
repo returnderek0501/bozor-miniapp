@@ -38,6 +38,7 @@ test('onboarding KYC maps into staff client shape without phone', async () => {
     kycStatus: 'approved',
     kycSubmittedAt: '2026-08-10T08:00:00.000Z',
     kycReviewedAt: '2026-08-10T09:00:00.000Z',
+    tags: [{ id: 'v_rabote', label: 'В работе', note: 'internal' }],
     kycDocuments: {
       idCardFront: { path: 'attachments/tg_555/front.jpg' },
       idCardBack: { path: 'attachments/tg_555/back.jpg' },
@@ -53,4 +54,5 @@ test('onboarding KYC maps into staff client shape without phone', async () => {
   assert.equal(summary.telegramLinked, true);
   assert.equal(summary.telegramId, 555);
   assert.equal(summary.hasKycDocuments, true);
+  assert.deepEqual(summary.tags, [{ id: 'v_rabote', label: 'В работе' }]);
 });

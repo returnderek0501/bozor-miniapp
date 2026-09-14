@@ -40,6 +40,29 @@ test('updateEmployeeFields validates all values before writing', async () => {
       () => store.updateEmployeeFields(phone, { balance: -1 }),
       /отрицательным/,
     );
+    assert.throws(
+      () => store.updateEmployeeFields(phone, { balance: Number.POSITIVE_INFINITY }),
+      /butun raqam/,
+    );
+    assert.throws(
+      () => store.updateEmployeeFields(phone, { age: 30.5 }),
+      /butun raqam/,
+    );
+    assert.throws(
+      () => store.updateEmployeeFields(phone, { name: { nested: true } }),
+      /строкой/,
+    );
+    assert.throws(
+      () => store.updateEmployeeFields(phone, { name: 'x'.repeat(121) }),
+      /слишком длинное/,
+    );
+    assert.throws(
+      () => store.updateEmployeeFields(phone, { balance: [] }),
+      /butun raqam/,
+    );
+
+    const clearedAge = store.updateEmployeeFields(phone, { age: '' });
+    assert.equal(clearedAge.age, '');
 
     const beforeTagChange = employee.updatedAt;
     await new Promise(resolve => setTimeout(resolve, 5));
@@ -66,6 +89,35 @@ test('updateEmployeeFields validates all values before writing', async () => {
     assert.equal(discoveredTag.tags.some(tag => (
       tag.id === 'operator_custom_tag' && tag.label === 'Кастомный тег оператора'
     )), true);
+
+    store.addClientTagByDefinition(phone, 'removed_later', 'Снять позднее', { id: 7, name: 'Admin' });
+    const removedLater = store.mergeClientTagState(phone, [], [{
+      id: 'removed_later',
+      label: 'Снять позднее',
+      action: 'remove',
+      at: '2099-01-01T00:00:00.000Z',
+      by: 8,
+      byName: 'Onboarding admin',
+    }]);
+    assert.equal(removedLater.tags.some(tag => tag.id === 'removed_later'), false);
+
+    store.addClientTagByDefinition(phone, 'added_later', 'Вернуть позднее', { id: 7, name: 'Admin' });
+    store.removeClientTag(phone, 'added_later', { id: 7, name: 'Admin' });
+    const addedLater = store.mergeClientTagState(phone, [{
+      id: 'added_later',
+      label: 'Вернуть позднее',
+      assignedAt: '2099-01-02T00:00:00.000Z',
+      assignedBy: 8,
+      assignedByName: 'Onboarding admin',
+    }], [{
+      id: 'added_later',
+      label: 'Вернуть позднее',
+      action: 'add',
+      at: '2099-01-02T00:00:00.000Z',
+      by: 8,
+      byName: 'Onboarding admin',
+    }]);
+    assert.equal(addedLater.tags.some(tag => tag.id === 'added_later'), true);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }

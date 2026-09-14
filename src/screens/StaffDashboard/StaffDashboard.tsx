@@ -68,6 +68,17 @@ function kycPrefix(clientId?: string, telegramId?: number) {
   return `client_${clientId || 'kyc'}`;
 }
 
+function withClientTag(client: StaffClient, tag: StaffTag, checked: boolean): StaffClient {
+  const hasTag = client.tags.some(item => item.id === tag.id);
+  if (checked === hasTag) return client;
+  return {
+    ...client,
+    tags: checked
+      ? [...client.tags, { id: tag.id, label: tag.label }]
+      : client.tags.filter(item => item.id !== tag.id),
+  };
+}
+
 export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [data, setData] = useState<StaffDashboardData | null>(null);
   const [tab, setTab] = useState<Tab>('kyc');
@@ -98,6 +109,8 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   const [provisionalPhone, setProvisionalPhone] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
   const reviewLock = useRef(false);
+  const dashboardGeneration = useRef(0);
+  const activeTagMutations = useRef(0);
 
   const selectedProvisional = useMemo(() => {
     if (!selectedClientId || !data) return null;
@@ -107,6 +120,8 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   }, [data, selectedClientId]);
 
   const refresh = useCallback(async () => {
+    const requestGeneration = dashboardGeneration.current + 1;
+    dashboardGeneration.current = requestGeneration;
     setLoading(true);
     setError('');
     try {
@@ -114,9 +129,14 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
         fetchStaffDashboard(),
         fetchStaffTags(),
       ]);
-      setData(dashboard);
+      if (
+        activeTagMutations.current === 0
+        && requestGeneration === dashboardGeneration.current
+      ) {
+        setData(dashboard);
+        setDeskName(dashboard.profile.deskName || '');
+      }
       setTags(tagData.tags);
-      setDeskName(dashboard.profile.deskName || '');
     } catch (requestError) {
       if (requestError instanceof Error && requestError.name === '401') {
         onLogout();
@@ -130,9 +150,15 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
 
   useEffect(() => {
     let active = true;
+    const requestGeneration = dashboardGeneration.current + 1;
+    dashboardGeneration.current = requestGeneration;
     void Promise.all([fetchStaffDashboard(), fetchStaffTags()])
       .then(([dashboard, tagData]) => {
-        if (!active) return;
+        if (
+          !active
+          || activeTagMutations.current > 0
+          || requestGeneration !== dashboardGeneration.current
+        ) return;
         setData(dashboard);
         setTags(tagData.tags);
         setDeskName(dashboard.profile.deskName || '');
@@ -155,8 +181,14 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
+      const requestGeneration = dashboardGeneration.current + 1;
+      dashboardGeneration.current = requestGeneration;
       void fetchStaffDashboard()
         .then(dashboard => {
+          if (
+            activeTagMutations.current > 0
+            || requestGeneration !== dashboardGeneration.current
+          ) return;
           setData(dashboard);
           if (dashboard.stats.recoveredOnboarding) {
             setNotice(
@@ -233,10 +265,18 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
   ]);
 
   const toggleClientTag = async (client: StaffClient, tag: StaffTag, checked: boolean) => {
-    if (client.provisional) return;
     const cellKey = `${client.clientId}:${tag.id}`;
     if (busyTagCells.has(cellKey)) return;
+    dashboardGeneration.current += 1;
+    activeTagMutations.current += 1;
+    setError('');
     setBusyTagCells(current => new Set(current).add(cellKey));
+    setData(current => current ? {
+      ...current,
+      clients: current.clients.map(item => (
+        item.clientId === client.clientId ? withClientTag(item, tag, checked) : item
+      )),
+    } : current);
     try {
       const response = checked
         ? await assignClientTag(client.clientId, { tagId: tag.id, label: tag.label })
@@ -244,13 +284,23 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
       setData(current => current ? {
         ...current,
         clients: current.clients.map(item => (
-          item.clientId === client.clientId ? response.client : item
+          item.clientId === client.clientId
+            ? { ...withClientTag(item, tag, checked), updatedAt: response.client.updatedAt }
+            : item
         )),
       } : current);
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
     } catch {
+      setData(current => current ? {
+        ...current,
+        clients: current.clients.map(item => (
+          item.clientId === client.clientId ? withClientTag(item, tag, !checked) : item
+        )),
+      } : current);
       setError(checked ? 'Не удалось присвоить тег.' : 'Не удалось снять тег.');
     } finally {
+      activeTagMutations.current = Math.max(0, activeTagMutations.current - 1);
+      dashboardGeneration.current += 1;
       setBusyTagCells(current => {
         const next = new Set(current);
         next.delete(cellKey);
@@ -737,6 +787,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
         </section>
       ) : (
         <StaffTools
+          key={`actions:${selectedProvisional ? 'none' : selectedClientId || 'none'}`}
           role={data?.profile.role || 'operator'}
           deskName={data?.profile.deskName || ''}
           showActions
@@ -754,6 +805,7 @@ export function StaffDashboard({ onLogout, browserMode = false }: Props) {
 
       {tab !== 'actions' && selectedClientId && !selectedProvisional && (
         <StaffTools
+          key={`client:${selectedClientId}`}
           role={data?.profile.role || 'operator'}
           deskName={data?.profile.deskName || ''}
           showActions={false}

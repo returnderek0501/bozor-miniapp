@@ -4,7 +4,7 @@ import {
   getEmployee, publicEmployee, withdrawAdvance, maskCard,
   submitKyc, applyApprovedKyc, listEmployees, listEmployeesForUser, findEmployeeByClientId, setKycStatus,
   addPhone, setEmployeeOperator, updateEmployeeFields,
-  addClientTag, addClientTagByDefinition, addClientTagFreeform, removeClientTag, getClientTag,
+  addClientTag, addClientTagByDefinition, addClientTagFreeform, removeClientTag,
   listPhones, normalizePhoneForOperator,
 } from './store.js';
 import {
@@ -34,7 +34,7 @@ import {
 } from './browserAuth.js';
 import { staffClientSummary, staffClientDetail, staffOnboardingClientSummary } from './staffDto.js';
 import {
-  listTagsForUser, addTag, removeTag, GLOBAL_TAG_COUNT,
+  listTagsForUser, addTag, removeTag, slugify, GLOBAL_TAG_COUNT,
 } from './tags.js';
 import {
   listOperators, addOperatorByTelegramId, removeOperator,
@@ -55,7 +55,8 @@ import {
   getOnboardingKyc, onboardingKycStatus, submitOnboardingKyc,
   listPendingOnboardingKyc, listApprovedUnlinkedOnboardingKyc, reviewOnboardingKyc,
   linkOnboardingKyc, onboardingKycStats, reconcileOnboardingFromAttachments,
-  assignOnboardingPhone, tryLinkApprovedOnboardingToSession,
+  addOnboardingClientTag, assignOnboardingPhone, removeOnboardingClientTag,
+  transferOnboardingTags, tryLinkApprovedOnboardingToSession,
 } from './onboardingKyc.js';
 import { getDataDir } from './dataPath.js';
 
@@ -193,6 +194,29 @@ export function createApiRouter(botToken) {
     return employee;
   }
 
+  function managedTagTarget(staff, clientId, res) {
+    const employee = findEmployeeByClientId(clientId);
+    if (employee) {
+      if (!canManageClient(staff.tgUser.id, employee, staff.deskName)) {
+        res.status(404).json({ success: false, error: 'CLIENT_NOT_FOUND' });
+        return null;
+      }
+      return { type: 'employee', record: employee };
+    }
+
+    if (!staff.isAdmin) {
+      res.status(404).json({ success: false, error: 'CLIENT_NOT_FOUND' });
+      return null;
+    }
+    const provisionalMatch = String(clientId || '').match(/^tg_(\d+)$/);
+    const onboarding = provisionalMatch ? getOnboardingKyc(Number(provisionalMatch[1])) : null;
+    if (!onboarding || onboarding.kycStatus !== 'approved' || onboarding.linkedPhone) {
+      res.status(404).json({ success: false, error: 'CLIENT_NOT_FOUND' });
+      return null;
+    }
+    return { type: 'onboarding', record: onboarding };
+  }
+
   function routeError(res, error, fallback = 'REQUEST_FAILED') {
     const code = String(error?.message || fallback);
     const status = code === 'BOT_UNAVAILABLE' ? 503 : 400;
@@ -311,9 +335,11 @@ export function createApiRouter(botToken) {
       realClients.map(client => Number(client.telegramId)).filter(Boolean),
     );
     // Approved KYC without a phone still appears in the clients panel.
-    const provisionalClients = listApprovedUnlinkedOnboardingKyc()
-      .filter(record => !linkedTelegramIds.has(Number(record.telegramId)))
-      .map(staffOnboardingClientSummary);
+    const provisionalClients = staff.isAdmin
+      ? listApprovedUnlinkedOnboardingKyc()
+        .filter(record => !linkedTelegramIds.has(Number(record.telegramId)))
+        .map(staffOnboardingClientSummary)
+      : [];
     const clients = [...provisionalClients, ...realClients]
       .sort((a, b) => {
         const aTime = Date.parse(a.updatedAt || a.createdAt || '') || 0;
@@ -485,10 +511,18 @@ export function createApiRouter(botToken) {
   router.post('/staff/clients/:clientId/tags', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
-    const employee = managedClient(staff, req.params.clientId, res);
-    if (!employee) return;
-    const tagId = String(req.body?.tagId || '').trim();
-    const label = String(req.body?.label || '').trim();
+    const target = managedTagTarget(staff, req.params.clientId, res);
+    if (!target) return;
+    const rawTagId = req.body?.tagId;
+    const rawLabel = req.body?.label;
+    if (
+      (rawTagId != null && typeof rawTagId !== 'string')
+      || (rawLabel != null && typeof rawLabel !== 'string')
+    ) {
+      return res.status(400).json({ success: false, error: 'INVALID_TAG' });
+    }
+    const tagId = rawTagId?.trim() || '';
+    const label = rawLabel?.trim() || '';
     if (!tagId && !label) {
       return res.status(400).json({ success: false, error: 'TAG_REQUIRED' });
     }
@@ -505,20 +539,38 @@ export function createApiRouter(botToken) {
     try {
       if (req.body?.photo) {
         const parsed = parseBase64Image(req.body.photo);
-        photo = saveTagBuffer(employee.clientId, tagId || label, parsed.buffer, parsed.ext);
+        const attachmentId = target.type === 'employee'
+          ? target.record.clientId
+          : target.record.provisionalId;
+        photo = saveTagBuffer(attachmentId, tagId || label, parsed.buffer, parsed.ext);
       }
       const extras = { note: req.body?.note, photo };
+      if (target.type === 'onboarding') {
+        const definition = catalogTag || discoveredTag || {
+          id: `custom_${slugify(label)}`,
+          label,
+        };
+        const updated = addOnboardingClientTag(
+          target.record.telegramId,
+          definition.id,
+          definition.label || label || definition.id,
+          staff.actor,
+          extras,
+        );
+        return res.json({ success: true, client: staffOnboardingClientSummary(updated) });
+      }
+
       const updated = catalogTag
-        ? addClientTag(employee.phone, tagId, staff.actor, extras)
+        ? addClientTag(target.record.phone, tagId, staff.actor, extras)
         : discoveredTag
           ? addClientTagByDefinition(
-            employee.phone,
+            target.record.phone,
             discoveredTag.id,
             discoveredTag.label || label || discoveredTag.id,
             staff.actor,
             extras,
           )
-        : addClientTagFreeform(employee.phone, label, staff.actor, extras);
+          : addClientTagFreeform(target.record.phone, label, staff.actor, extras);
       return res.json({ success: true, client: staffClientDetail(updated) });
     } catch (error) {
       if (photo) deleteKycDocuments({ photo });
@@ -529,20 +581,24 @@ export function createApiRouter(botToken) {
   router.delete('/staff/clients/:clientId/tags/:tagId', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
-    const employee = managedClient(staff, req.params.clientId, res);
-    if (!employee) return;
-    const tag = getClientTag(employee, req.params.tagId);
+    const target = managedTagTarget(staff, req.params.clientId, res);
+    if (!target) return;
+    const tag = (target.record.tags || []).find(item => item.id === req.params.tagId);
     if (!tag) return res.status(404).json({ success: false, error: 'TAG_NOT_FOUND' });
-    const updated = removeClientTag(employee.phone, tag.id, staff.actor);
+    if (target.type === 'onboarding') {
+      const updated = removeOnboardingClientTag(target.record.telegramId, tag.id, staff.actor);
+      return res.json({ success: true, client: staffOnboardingClientSummary(updated) });
+    }
+    const updated = removeClientTag(target.record.phone, tag.id, staff.actor);
     return res.json({ success: true, client: staffClientDetail(updated) });
   });
 
   router.get('/staff/clients/:clientId/tags/:tagId/photo', (req, res) => {
     const staff = requireStaffResponse(req, res);
     if (!staff) return;
-    const employee = managedClient(staff, req.params.clientId, res);
-    if (!employee) return;
-    const tag = getClientTag(employee, req.params.tagId);
+    const target = managedTagTarget(staff, req.params.clientId, res);
+    if (!target) return;
+    const tag = (target.record.tags || []).find(item => item.id === req.params.tagId);
     if (!tag?.photo?.path) return res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
     return res.sendFile(attachmentAbsolutePath(tag.photo.path), error => {
       if (error && !res.headersSent) res.status(404).json({ error: 'PHOTO_NOT_FOUND' });
@@ -1001,6 +1057,7 @@ export function createApiRouter(botToken) {
         return res.status(403).json({ authorized: false, reason: 'kyc_phone_mismatch' });
       }
       emp = applyApprovedKyc(normalized, onboarding);
+      emp = transferOnboardingTags(normalized, onboarding, emp);
       linkOnboardingKyc(tgUser.id, normalized);
     }
     setSession(tgUser.id, normalized, tgUser);
