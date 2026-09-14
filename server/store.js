@@ -333,19 +333,36 @@ const EMPLOYEE_FIELDS = {
   operator: 'operator', oper: 'operator',
 };
 
+const EMPLOYEE_STRING_LIMITS = {
+  fullName: 120,
+  maritalStatus: 60,
+  employeeId: 80,
+  operator: 80,
+};
+
 function normalizeEmployeeField(field, value) {
   const mapped = EMPLOYEE_FIELDS[String(field).toLowerCase()];
   if (!mapped) {
     throw new Error('Noma\'lum maydon. Mavjud: name, age, marital, balance, id, operator');
   }
   if (mapped === 'advanceBalance' || mapped === 'age') {
-    const num = Number(String(value).replace(/\s/g, ''));
-    if (Number.isNaN(num)) throw new Error(mapped === 'age' ? 'Yosh raqam bo\'lishi kerak' : 'Balans raqam bo\'lishi kerak');
+    if (typeof value !== 'string' && typeof value !== 'number') {
+      throw new Error(mapped === 'age' ? 'Yosh butun raqam bo\'lishi kerak' : 'Balans butun raqam bo\'lishi kerak');
+    }
+    const normalized = String(value).replace(/\s/g, '');
+    if (mapped === 'age' && normalized === '') return [mapped, ''];
+    const num = Number(normalized);
+    if (!Number.isSafeInteger(num)) throw new Error(mapped === 'age' ? 'Yosh butun raqam bo\'lishi kerak' : 'Balans butun raqam bo\'lishi kerak');
     if (mapped === 'age' && (num < 1 || num > 120)) throw new Error('Yosh 1–120 oralig\'ida bo\'lishi kerak');
     if (mapped === 'advanceBalance' && num < 0) throw new Error('Баланс не может быть отрицательным');
     return [mapped, num];
   }
-  return [mapped, value];
+  if (typeof value !== 'string') throw new Error('Значение должно быть строкой');
+  const normalized = value.trim();
+  if (normalized.length > EMPLOYEE_STRING_LIMITS[mapped]) {
+    throw new Error(`Значение слишком длинное (максимум ${EMPLOYEE_STRING_LIMITS[mapped]} символов)`);
+  }
+  return [mapped, normalized];
 }
 
 export function updateEmployeeFields(rawPhone, updates) {
@@ -395,17 +412,90 @@ export function addClientTag(rawPhone, tagId, actor, extras = null) {
 }
 
 export function addClientTagFreeform(rawPhone, label, actor, extras = null) {
-  const trimmed = String(label || '').trim();
+  if (typeof label !== 'string') throw new Error('Тег должен быть строкой');
+  const trimmed = label.trim();
   if (!trimmed) throw new Error('Тег не может быть пустым');
+  if (trimmed.length > 80) throw new Error('Название тега слишком длинное');
   const tagId = `custom_${slugify(trimmed)}`;
   return addClientTagInternal(rawPhone, tagId, trimmed, actor, extras);
 }
 
 export function addClientTagByDefinition(rawPhone, tagId, label, actor, extras = null) {
-  const normalizedId = String(tagId || '').trim();
-  const normalizedLabel = String(label || '').trim();
+  if (typeof tagId !== 'string' || typeof label !== 'string') {
+    throw new Error('Тег должен быть строкой');
+  }
+  const normalizedId = tagId.trim();
+  const normalizedLabel = label.trim();
   if (!normalizedId || !normalizedLabel) throw new Error('Тег не может быть пустым');
+  if (normalizedId.length > 64 || normalizedLabel.length > 80) {
+    throw new Error('Название тега слишком длинное');
+  }
   return addClientTagInternal(rawPhone, normalizedId, normalizedLabel, actor, extras);
+}
+
+/** Preserve provisional tag state and audit metadata when a phone is linked. */
+export function mergeClientTagState(rawPhone, tags = [], tagHistory = []) {
+  const phone = resolvePhoneKey(rawPhone);
+  if (!phone) throw new Error('Noto\'g\'ri telefon');
+
+  const all = readEmployees();
+  const emp = migrateEmployee(all[phone] || defaultEmployee(phone));
+  const incomingTags = Array.isArray(tags) ? tags : [];
+  for (const source of incomingTags) {
+    if (!source || typeof source !== 'object') continue;
+    const id = String(source.id || '').trim();
+    const label = String(source.label || id).trim();
+    if (!id || !label) continue;
+    const imported = {
+      ...source,
+      id,
+      label,
+      assignedAt: source.assignedAt || new Date().toISOString(),
+      assignedBy: source.assignedBy ?? null,
+      assignedByName: String(source.assignedByName || ''),
+      note: String(source.note || ''),
+    };
+    const existingIndex = emp.tags.findIndex(tag => tag.id === id);
+    if (existingIndex < 0) {
+      emp.tags.push(imported);
+      continue;
+    }
+    const existing = emp.tags[existingIndex];
+    const existingAt = Date.parse(existing.assignedAt || '') || 0;
+    const importedAt = Date.parse(imported.assignedAt || '') || 0;
+    if (importedAt >= existingAt) emp.tags[existingIndex] = { ...existing, ...imported };
+  }
+
+  const historyKeys = new Set((emp.tagHistory || []).map(entry => (
+    `${entry.id || ''}\u0000${entry.action || ''}\u0000${entry.at || ''}\u0000${entry.by ?? ''}`
+  )));
+  for (const source of Array.isArray(tagHistory) ? tagHistory : []) {
+    if (!source || typeof source !== 'object') continue;
+    const entry = { ...source };
+    const historyKey = `${entry.id || ''}\u0000${entry.action || ''}\u0000${entry.at || ''}\u0000${entry.by ?? ''}`;
+    if (!entry.id || !entry.action || historyKeys.has(historyKey)) continue;
+    emp.tagHistory.push(entry);
+    historyKeys.add(historyKey);
+  }
+  emp.tagHistory.sort((left, right) => (
+    (Date.parse(left.at || '') || 0) - (Date.parse(right.at || '') || 0)
+  ));
+  const latestHistoryByTag = new Map();
+  for (const entry of emp.tagHistory) {
+    if (entry?.id) latestHistoryByTag.set(entry.id, entry);
+  }
+  emp.tags = emp.tags.filter(tag => {
+    const latest = latestHistoryByTag.get(tag.id);
+    if (!latest || latest.action !== 'remove') return true;
+    const assignedAt = Date.parse(tag.assignedAt || '') || 0;
+    const removedAt = Date.parse(latest.at || '') || 0;
+    return assignedAt > removedAt;
+  });
+
+  emp.updatedAt = new Date().toISOString();
+  all[phone] = emp;
+  writeEmployees(all);
+  return emp;
 }
 
 function addClientTagInternal(rawPhone, tagId, label, actor, extras = null) {
@@ -413,7 +503,11 @@ function addClientTagInternal(rawPhone, tagId, label, actor, extras = null) {
   if (!phone) throw new Error('Noto\'g\'ri telefon');
 
   const photo = extras?.photo || null;
-  const note = extras?.note ? String(extras.note).trim() : '';
+  if (extras?.note != null && typeof extras.note !== 'string') {
+    throw new Error('Комментарий должен быть строкой');
+  }
+  const note = extras?.note?.trim() || '';
+  if (note.length > 1000) throw new Error('Комментарий слишком длинный');
 
   const all = readEmployees();
   const emp = migrateEmployee(all[phone] || defaultEmployee(phone));

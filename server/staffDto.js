@@ -69,7 +69,7 @@ export function staffOnboardingClientSummary(record) {
     kycSubmittedAt: record.kycSubmittedAt || null,
     kycReviewedAt: record.kycReviewedAt || null,
     kycRejectionReason: record.kycRejectionReason || '',
-    tags: [],
+    tags: (record.tags || []).map(tag => ({ id: tag.id, label: tag.label })),
     createdAt: record.kycSubmittedAt || record.updatedAt || null,
     updatedAt: record.updatedAt || record.kycReviewedAt || record.kycSubmittedAt || null,
     profileComplete: false,

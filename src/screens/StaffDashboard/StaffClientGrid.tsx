@@ -48,7 +48,15 @@ export function StaffClientGrid({
         </thead>
         <tbody>
           {clients.map(client => (
-            <tr key={client.clientId}>
+            <tr
+              className="staff-client-grid__row"
+              key={client.clientId}
+              onClick={event => {
+                if (event.target instanceof Element
+                  && event.target.closest('button, input, label, a, select, textarea')) return;
+                onOpenClient(client.clientId);
+              }}
+            >
               <td className="staff-client-grid__lead">
                 <button type="button" onClick={() => onOpenClient(client.clientId)}>
                   <strong>{client.profileComplete ? '' : '⚠️ '}#{client.clientId}</strong>
@@ -74,17 +82,24 @@ export function StaffClientGrid({
               {tags.map(tag => {
                 const cellKey = `${client.clientId}:${tag.id}`;
                 const checked = client.tags.some(clientTag => clientTag.id === tag.id);
+                const busy = busyCells.has(cellKey);
                 return (
-                  <td className="staff-client-grid__tag-cell" key={tag.id}>
-                    <label className={busyCells.has(cellKey) ? 'is-busy' : ''}>
+                  <td
+                    className="staff-client-grid__tag-cell"
+                    key={tag.id}
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <label className={`${checked ? 'is-checked' : ''}${busy ? ' is-busy' : ''}`}>
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={Boolean(client.provisional) || busyCells.has(cellKey)}
+                        disabled={busy}
                         aria-label={`${tag.label}: ${client.fullName || `клиент ${client.clientId}`}`}
+                        aria-busy={busy}
+                        onClick={event => event.stopPropagation()}
                         onChange={event => onToggleTag(client, tag, event.currentTarget.checked)}
                       />
-                      <span aria-hidden="true">✓</span>
+                      <span aria-hidden="true">{busy ? '…' : checked ? '✓' : ''}</span>
                     </label>
                   </td>
                 );

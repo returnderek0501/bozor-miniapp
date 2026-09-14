@@ -68,6 +68,16 @@ const EMPTY_EDIT: EditValues = {
   advanceBalance: '',
 };
 
+function editValuesFromClient(client: StaffClient): EditValues {
+  return {
+    fullName: client.fullName,
+    age: String(client.age ?? ''),
+    maritalStatus: client.maritalStatus,
+    employeeId: client.employeeId,
+    advanceBalance: String(client.advanceBalance ?? 0),
+  };
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return '—';
   return new Date(value).toLocaleString('ru-RU', {
@@ -132,6 +142,10 @@ export function StaffTools({
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<StaffClient | null>(null);
   const [edit, setEdit] = useState<EditValues>(EMPTY_EDIT);
+  const [clientLoading, setClientLoading] = useState(Boolean(selectedClientId));
+  const [clientError, setClientError] = useState('');
+  const [clientNotice, setClientNotice] = useState('');
+  const [savingClient, setSavingClient] = useState(false);
   const [operatorName, setOperatorName] = useState('');
   const [message, setMessage] = useState('');
   const [tags, setTags] = useState<StaffTag[]>([]);
@@ -161,20 +175,17 @@ export function StaffTools({
       .then(({ client }) => {
         if (!active) return;
         setDetail(client);
-        setEdit({
-          fullName: client.fullName,
-          age: String(client.age ?? ''),
-          maritalStatus: client.maritalStatus,
-          employeeId: client.employeeId,
-          advanceBalance: String(client.advanceBalance ?? 0),
-        });
+        setEdit(editValuesFromClient(client));
         setOperatorName(client.operator);
       })
       .catch(() => {
-        if (active) onError('Не удалось открыть карточку клиента.');
+        if (active) setClientError('Не удалось открыть карточку клиента. Закройте её и попробуйте снова.');
+      })
+      .finally(() => {
+        if (active) setClientLoading(false);
       });
     return () => { active = false; };
-  }, [selectedClientId, onError]);
+  }, [selectedClientId]);
 
   useEffect(() => () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -183,6 +194,12 @@ export function StaffTools({
   const fail = (message = 'Операция не выполнена.') => {
     onError(message);
     setBusy(false);
+  };
+
+  const setEditField = (field: keyof EditValues, value: string) => {
+    setClientError('');
+    setClientNotice('');
+    setEdit(current => ({ ...current, [field]: value }));
   };
 
   const openCatalog = async () => {
@@ -271,22 +288,60 @@ export function StaffTools({
   };
 
   const saveClient = async () => {
-    if (!detail) return;
+    if (!detail || savingClient) return;
+    setClientError('');
+    setClientNotice('');
+
+    const updates: Parameters<typeof updateStaffClient>[1] = {};
+    const fullName = edit.fullName.trim();
+    const maritalStatus = edit.maritalStatus.trim();
+    const employeeId = edit.employeeId.trim();
+    const ageText = edit.age.trim();
+    const currentAge = String(detail.age ?? '').trim();
+    const advanceBalance = Number(edit.advanceBalance || 0);
+
+    if (fullName !== detail.fullName.trim()) updates.fullName = fullName;
+    if (maritalStatus !== detail.maritalStatus.trim()) updates.maritalStatus = maritalStatus;
+    if (employeeId !== detail.employeeId.trim()) updates.employeeId = employeeId;
+    if (ageText !== currentAge) {
+      if (ageText === '') updates.age = '';
+      else {
+        const age = Number(ageText);
+        if (!Number.isInteger(age) || age < 1 || age > 120) {
+          setClientError('Возраст должен быть целым числом от 1 до 120.');
+          return;
+        }
+        updates.age = age;
+      }
+    }
+    if (!Number.isSafeInteger(advanceBalance) || advanceBalance < 0) {
+      setClientError('Аванс должен быть целой неотрицательной суммой.');
+      return;
+    }
+    if (advanceBalance !== Number(detail.advanceBalance || 0)) {
+      updates.advanceBalance = advanceBalance;
+    }
+    if (!Object.keys(updates).length) {
+      setClientNotice('В данных клиента нет изменений.');
+      return;
+    }
+
+    setSavingClient(true);
     setBusy(true);
     try {
-      const response = await updateStaffClient(detail.clientId, {
-        fullName: edit.fullName,
-        age: edit.age,
-        maritalStatus: edit.maritalStatus,
-        employeeId: edit.employeeId,
-        advanceBalance: Number(edit.advanceBalance || 0),
-      });
+      const response = await updateStaffClient(detail.clientId, updates);
       setDetail(response.client);
-      await onRefresh();
+      setEdit(editValuesFromClient(response.client));
+      setClientNotice('Данные клиента сохранены.');
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+      void onRefresh().catch(() => {
+        // The edit is already saved; the dashboard will retry its own refresh.
+      });
     } catch {
-      fail('Не удалось сохранить данные клиента.');
+      setClientError('Не удалось сохранить данные клиента. Проверьте значения и повторите попытку.');
     } finally {
       setBusy(false);
+      setSavingClient(false);
     }
   };
 
@@ -501,12 +556,21 @@ export function StaffTools({
         </>
       )}
 
-      {selectedClientId && detail?.clientId === selectedClientId && (
-        <ToolModal title={`Клиент #${detail.clientId}`} onClose={onCloseClient} wide>
+      {selectedClientId && (
+        <ToolModal title={`Клиент #${selectedClientId}`} onClose={onCloseClient} wide>
+          {clientLoading ? (
+            <p className="staff-tool-loading" role="status">Загружаем карточку клиента…</p>
+          ) : detail?.clientId === selectedClientId ? (
+            <>
           <div className="staff-client-detail__summary">
             <strong>{detail.fullName || 'Имя не заполнено'}</strong>
             <span>{detail.phone} · {detail.operator || 'без оператора'}</span>
           </div>
+
+          {clientNotice && (
+            <p className="staff-dashboard__notice" role="status">{clientNotice}</p>
+          )}
+          {clientError && <p className="staff-tool-error" role="alert">{clientError}</p>}
 
           <div className="staff-tool-section">
             <h3>Telegram</h3>
@@ -522,13 +586,15 @@ export function StaffTools({
           <div className="staff-tool-section">
             <h3>Данные клиента</h3>
             <div className="staff-tool-form staff-tool-form--grid">
-              <label>ФИО<input value={edit.fullName} onChange={event => setEdit({ ...edit, fullName: event.target.value })} /></label>
-              <label>Возраст<input inputMode="numeric" value={edit.age} onChange={event => setEdit({ ...edit, age: event.target.value })} /></label>
-              <label>Семейное положение<input value={edit.maritalStatus} onChange={event => setEdit({ ...edit, maritalStatus: event.target.value })} /></label>
-              <label>ID кабинета<input value={edit.employeeId} onChange={event => setEdit({ ...edit, employeeId: event.target.value })} /></label>
-              <label>Аванс<input inputMode="numeric" value={edit.advanceBalance} onChange={event => setEdit({ ...edit, advanceBalance: event.target.value.replace(/\D/g, '') })} /></label>
+              <label>ФИО<input value={edit.fullName} maxLength={120} disabled={savingClient} onChange={event => setEditField('fullName', event.target.value)} /></label>
+              <label>Возраст<input inputMode="numeric" value={edit.age} disabled={savingClient} onChange={event => setEditField('age', event.target.value)} /></label>
+              <label>Семейное положение<input value={edit.maritalStatus} maxLength={60} disabled={savingClient} onChange={event => setEditField('maritalStatus', event.target.value)} /></label>
+              <label>ID кабинета<input value={edit.employeeId} maxLength={80} disabled={savingClient} onChange={event => setEditField('employeeId', event.target.value)} /></label>
+              <label>Аванс<input inputMode="numeric" value={edit.advanceBalance} disabled={savingClient} onChange={event => setEditField('advanceBalance', event.target.value)} /></label>
             </div>
-            <button type="button" className="staff-tool-primary" onClick={() => { void saveClient(); }} disabled={busy}>Сохранить данные</button>
+            <button type="button" className="staff-tool-primary" onClick={() => { void saveClient(); }} disabled={busy}>
+              {savingClient ? 'Сохраняем…' : 'Сохранить данные'}
+            </button>
           </div>
 
           <div className="staff-tool-section">
@@ -594,6 +660,12 @@ export function StaffTools({
                 {downloadingKyc ? 'Скачиваем…' : 'Скачать фото в галерею'}
               </button>
             </div>
+          )}
+            </>
+          ) : (
+            <p className="staff-tool-error" role="alert">
+              {clientError || 'Карточка клиента недоступна.'}
+            </p>
           )}
         </ToolModal>
       )}

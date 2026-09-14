@@ -77,6 +77,31 @@ test('approved onboarding KYC can be assigned a phone from staff panel', async (
     onboarding.reviewOnboardingKyc(tgUser.id, 'approved', { id: 1, name: 'Admin' });
     assert.equal(onboarding.listApprovedUnlinkedOnboardingKyc().length, 1);
 
+    const tagged = onboarding.addOnboardingClientTag(
+      tgUser.id,
+      'pasport',
+      'Паспорт получен',
+      { id: 1, name: 'Admin' },
+    );
+    assert.deepEqual(
+      tagged.tags.map(tag => ({ id: tag.id, label: tag.label })),
+      [{ id: 'pasport', label: 'Паспорт получен' }],
+    );
+    const untagged = onboarding.removeOnboardingClientTag(
+      tgUser.id,
+      'pasport',
+      { id: 1, name: 'Admin' },
+    );
+    assert.equal(untagged.tags.length, 0);
+    assert.deepEqual(untagged.tagHistory.slice(-2).map(entry => entry.action), ['add', 'remove']);
+    onboarding.addOnboardingClientTag(
+      tgUser.id,
+      'v_rabote',
+      'В работе',
+      { id: 1, name: 'Admin' },
+      { note: 'Позвонить завтра' },
+    );
+
     const result = onboarding.assignOnboardingPhone(
       tgUser.id,
       '901112233',
@@ -85,6 +110,14 @@ test('approved onboarding KYC can be assigned a phone from staff panel', async (
     assert.equal(result.phone, '+998901112233');
     assert.equal(result.employee.kycStatus, 'approved');
     assert.equal(result.employee.fullName, 'Dilshod Aliyev');
+    assert.deepEqual(
+      result.employee.tags.map(tag => ({ id: tag.id, label: tag.label, note: tag.note })),
+      [{ id: 'v_rabote', label: 'В работе', note: 'Позвонить завтра' }],
+    );
+    const sourceRecord = onboarding.getOnboardingKyc(tgUser.id);
+    assert.equal(result.employee.tags[0].assignedBy, 1);
+    assert.equal(result.employee.tags[0].assignedAt, sourceRecord.tags[0].assignedAt);
+    assert.deepEqual(result.employee.tagHistory, sourceRecord.tagHistory);
     assert.equal(result.record.linkedPhone, '+998901112233');
     assert.equal(onboarding.listApprovedUnlinkedOnboardingKyc().length, 0);
     assert.equal(store.getSession(tgUser.id)?.phone, '+998901112233');
