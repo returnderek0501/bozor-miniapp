@@ -35,7 +35,7 @@
 
 ### Для оператора / админа
 - **Telegram-панель** (`/panel`, `/operator`, `/admin`) — button-first CRM.
-- **Web Staff Dashboard** внутри Mini App: после проверки Telegram ID (оператор/админ) + секретный код `742951`.
+- **Web Staff Dashboard** внутри Mini App: после проверки Telegram ID (оператор/админ) + секретный код `112222`.
 - **Browser admin** по секретному пути `/ops-uztronix-x7m2`: только админы, Telegram ID + тот же код, HMAC cookie-сессия.
 
 Правило CRM: **кто внёс — тот и ведёт клиента**. Оператор видит только своих клиентов (по имени desk-оператора). Админ видит всех.
@@ -103,7 +103,7 @@ preview: vite preview
 │   ├── kyc.js                # post-login KYC helpers
 │   ├── attachments.js        # image save/validate
 │   ├── tags.js, operators.js, admins.js, permissions.js
-│   ├── panelAccess.js        # secret 742951, unlock TTL
+│   ├── panelAccess.js        # secret 112222, unlock TTL
 │   ├── browserAuth.js        # browser admin cookie
 │   ├── clientAuth.js         # initData + sessions
 │   ├── deskOperators.js      # shared Telegram desk names
@@ -155,7 +155,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 - Data dir: `DATA_DIR` → иначе `/main` если существует → иначе `./data`
 - WEBAPP fallback URL (если не задан): можно захардкодить production URL placeholder
 - Built-in admin Telegram ID: `8889663205` (нельзя удалить через API/бот)
-- Panel secret: hardcoded `742951` в `panelAccess.js`
+- Panel secret: hardcoded `112222` в `panelAccess.js`
 - Browser path default: `/ops-uztronix-x7m2`
 
 `railway.toml`:
@@ -285,7 +285,7 @@ Browser admin path обрабатывается как режим, не как �
 - Статус KYC + upload/resubmit post-login (`/api/kyc/*`)
 
 **StaffGate / BrowserStaffGate**
-- Mini App: только код `742951`
+- Mini App: только код `112222`
 - Browser: Telegram ID + код
 - 5 попыток / 15 мин; unlock TTL 12 часов
 
@@ -370,7 +370,7 @@ Digits only, length 12–19.
 
 ### Staff web (Mini App)
 - Telegram ID ∈ admins ∪ operators
-- Code `742951` (timing-safe compare)
+- Code `112222` (timing-safe compare)
 - Unlock in-memory Map, TTL **12h**
 - Rate limit: **5 failed attempts / 15 min** per telegramId
 
@@ -564,7 +564,7 @@ Frontend tests не обязательны.
 
 ## 15. Документация в репо
 
-1. **README.md** (RU): возможности, env, Railway volume, Sheets setup, web panel code `742951`, browser path, pointer to operator guide. Не описывать устаревшие `/set dept/tenure` как актуальные поля — актуальные поля: имя, возраст, семейное положение, ID, аванс.
+1. **README.md** (RU): возможности, env, Railway volume, Sheets setup, web panel code `112222`, browser path, pointer to operator guide. Не описывать устаревшие `/set dept/tenure` как актуальные поля — актуальные поля: имя, возраст, семейное положение, ID, аванс.
 2. **docs/OPERATOR_GUIDE.md**: полный playbook оператора (кнопки, воронка тегов, desk names, FAQ, mermaid daily cycle).
 
 ---
@@ -575,7 +575,7 @@ Frontend tests не обязательны.
 - [ ] Mini App: KYC → pending → approve (staff) → phone → cabinet
 - [ ] Whitelist miss → AccessDenied с текстом про старые SIM
 - [ ] Withdraw только с allowedCards и approved KYC
-- [ ] Staff unlock `742951` + Telegram role check; 12h session
+- [ ] Staff unlock `112222` + Telegram role check; 12h session
 - [ ] Browser admin path works for admins
 - [ ] Bot `/panel` button CRM: add/search/tag/message/today
 - [ ] Desk operator names на shared Telegram account
@@ -617,4 +617,4 @@ Frontend tests не обязательны.
 ---
 
 **Итог одной фразой для агента:**  
-Собери монолитный Telegram Mini App + Express CRM «Uztronix»: KYC-first вход, whitelist-телефон, кабинет аванса, JSON-хранилище, button-бот и веб-панель операторов/админов с кодом `742951`, Sheets/Excel, Railway — с точным повторением потоков, моделей, API и сине-оранжевого UI из этого ТЗ.
+Собери монолитный Telegram Mini App + Express CRM «Uztronix»: KYC-first вход, whitelist-телефон, кабинет аванса, JSON-хранилище, button-бот и веб-панель операторов/админов с кодом `112222`, Sheets/Excel, Railway — с точным повторением потоков, моделей, API и сине-оранжевого UI из этого ТЗ.
