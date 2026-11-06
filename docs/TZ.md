@@ -1,4 +1,4 @@
-# ТЗ / Master Prompt: Uztronix Holding — Telegram Mini App + CRM
+# ТЗ / Master Prompt: Asterium Holding — Telegram Mini App + CRM
 
 Скопируй этот документ целиком как единый промпт агенту/разработчику. Цель: **с нуля воспроизвести функционально эквивалентный проект** (не «похожее приложение», а тот же продукт: стек, потоки, модели, API, UI, деплой).
 
@@ -8,8 +8,8 @@
 
 Ты — senior full-stack инженер. Создай production-ready монорепо:
 
-**Название пакета:** `uztronix-miniapp`  
-**Бренд:** Uztronix (Uztronix Holding)  
+**Название пакета:** `asterium-miniapp`  
+**Бренд:** Asterium (Asterium Holding)  
 **Продукт:** Telegram Mini App «личный кабинет сотрудника» + внутренний CRM (Telegram-бот кнопками + веб Staff Dashboard + браузерная админ-панель).
 
 Один Node-процесс обслуживает:
@@ -36,7 +36,7 @@
 ### Для оператора / админа
 - **Telegram-панель** (`/panel`, `/operator`, `/admin`) — button-first CRM.
 - **Web Staff Dashboard** внутри Mini App: после проверки Telegram ID (оператор/админ) + секретный код `112222`.
-- **Browser admin** по секретному пути `/ops-uztronix-x7m2`: только админы, Telegram ID + тот же код, HMAC cookie-сессия.
+- **Browser admin** по секретному пути `/ops-asterium-x7m2`: только админы, Telegram ID + тот же код, HMAC cookie-сессия.
 
 Правило CRM: **кто внёс — тот и ведёт клиента**. Оператор видит только своих клиентов (по имени desk-оператора). Админ видит всех.
 
@@ -140,7 +140,7 @@ ADMIN_IDS=123456789             # comma-separated
 WEBAPP_URL=https://your-app.up.railway.app
 DATA_DIR=/main
 PORT=3000
-BROWSER_ADMIN_PATH=/ops-uztronix-x7m2
+BROWSER_ADMIN_PATH=/ops-asterium-x7m2
 BROWSER_SESSION_SECRET=change-me-long-random-string
 GOOGLE_SHEETS_ID=
 GOOGLE_SHEETS_TAB=Сотрудники    # legacy/unused в коде; вкладки хардкодятся
@@ -156,7 +156,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 - WEBAPP fallback URL (если не задан): можно захардкодить production URL placeholder
 - Built-in admin Telegram ID: `8889663205` (нельзя удалить через API/бот)
 - Panel secret: hardcoded `112222` в `panelAccess.js`
-- Browser path default: `/ops-uztronix-x7m2`
+- Browser path default: `/ops-asterium-x7m2`
 
 `railway.toml`:
 ```
@@ -203,7 +203,7 @@ Dark theme `[data-theme="dark"]`:
 ### Типографика
 - Google Font **Inter** 400–700 (`index.html`)
 - `theme-color` meta: `#0047B3`
-- Title: `Uztronix — Shaxsiy kabinet`
+- Title: `Asterium — Shaxsiy kabinet`
 - Подключить `https://telegram.org/js/telegram-web-app.js`
 
 ### Layout
@@ -212,7 +212,7 @@ Dark theme `[data-theme="dark"]`:
 - Cabinet: синяя balance-card с оранжевой верхней границей; soft info rows
 - Staff Dashboard: русский UI, tabs, denser filters, modals; poll refresh ~20s
 - ThemeToggle + переключатель UZ/RU
-- Логотипы: light/dark/header SVG (сине-оранжевый бренд «UZ»/Uztronix)
+- Логотипы: light/dark/header SVG (сине-оранжевый бренд «UZ»/Asterium)
 
 ### Ключевые тексты (должны совпадать по смыслу)
 
@@ -312,7 +312,7 @@ Browser admin path обрабатывается как режим, не как �
 | `broadcasts.json` | `{ items: Broadcast[] }` |
 | `tag_reminders.json` | `{ byPhone: {...}, updatedAt }` |
 | `attachments/<clientId|tg_*>/` | KYC & tag photos |
-| `uztronix_export.xlsx` | debounced local export |
+| `asterium_export.xlsx` | debounced local export |
 
 ### Employee
 ```js
@@ -375,7 +375,7 @@ Digits only, length 12–19.
 - Rate limit: **5 failed attempts / 15 min** per telegramId
 
 ### Browser admin
-- Path `BROWSER_ADMIN_PATH` (default `/ops-uztronix-x7m2`)
+- Path `BROWSER_ADMIN_PATH` (default `/ops-asterium-x7m2`)
 - Admins only
 - Login: telegramId + secret → HMAC-signed cookie `uz_browser_staff`
 - Secret: `BROWSER_SESSION_SECRET` or fallback `BOT_TOKEN`
@@ -591,7 +591,7 @@ Frontend tests не обязательны.
 
 - Не использовать SQL/Prisma/Redis/Tailwind/MUI
 - Не добавлять реальный платёжный gateway
-- Не делать purple/cream AI-slop дизайн — строго сине-оранжевый Uztronix + Inter
+- Не делать purple/cream AI-slop дизайн — строго сине-оранжевый Asterium + Inter
 - Не открывать кабинет до одобренного onboarding KYC
 - Не показывать оператору чужих клиентов
 - Не стартовать бота при mismatch `EXPECTED_BOT_USERNAME`
@@ -617,4 +617,4 @@ Frontend tests не обязательны.
 ---
 
 **Итог одной фразой для агента:**  
-Собери монолитный Telegram Mini App + Express CRM «Uztronix»: KYC-first вход, whitelist-телефон, кабинет аванса, JSON-хранилище, button-бот и веб-панель операторов/админов с кодом `112222`, Sheets/Excel, Railway — с точным повторением потоков, моделей, API и сине-оранжевого UI из этого ТЗ.
+Собери монолитный Telegram Mini App + Express CRM «Asterium»: KYC-first вход, whitelist-телефон, кабинет аванса, JSON-хранилище, button-бот и веб-панель операторов/админов с кодом `112222`, Sheets/Excel, Railway — с точным повторением потоков, моделей, API и сине-оранжевого UI из этого ТЗ.

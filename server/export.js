@@ -18,7 +18,7 @@ import {
 import { syncToGoogleSheets } from './sheets.js';
 import { staffStatsData } from './stats.js';
 
-const EXPORT_FILE = join(DATA_DIR, 'uztronix_export.xlsx');
+const EXPORT_FILE = join(DATA_DIR, 'asterium_export.xlsx');
 
 export function buildWorkbookData() {
   const employees = listEmployees();
@@ -91,5 +91,5 @@ export function scheduleDataSync() {
 }
 
 export function getExportFilename() {
-  return `uztronix_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return `asterium_${new Date().toISOString().slice(0, 10)}.xlsx`;
 }

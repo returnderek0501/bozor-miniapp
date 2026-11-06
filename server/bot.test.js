@@ -102,9 +102,9 @@ test('/start sends a welcome without requiring msg.from', async () => {
 });
 
 test('bot identity guard accepts only the configured username', () => {
-  const botInfo = { id: 123, username: 'UztronixBot' };
+  const botInfo = { id: 123, username: 'AsteriumBot' };
 
   assert.equal(matchesExpectedBotUsername(botInfo, ''), true);
-  assert.equal(matchesExpectedBotUsername(botInfo, '@uztronixbot'), true);
+  assert.equal(matchesExpectedBotUsername(botInfo, '@asteriumbot'), true);
   assert.equal(matchesExpectedBotUsername(botInfo, 'OTHER_BOT'), false);
 });

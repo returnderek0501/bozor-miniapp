@@ -29,7 +29,7 @@ app.get('*', (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Uztronix server running on port ${PORT}`);
+  console.log(`Asterium server running on port ${PORT}`);
   console.log(`Data directory: ${getDataDir()}`);
   console.log(`Google Sheets sync: ${isSheetsConfigured() ? 'enabled' : 'disabled'}`);
   console.log(`Browser admin path: ${getBrowserAdminPath()}`);

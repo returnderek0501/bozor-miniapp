@@ -53,14 +53,16 @@ function matchCmd(text, ...cmds) {
   return cmds.includes(c);
 }
 
-const DEFAULT_MINI_APP_URL = 'https://bozor-miniapp-production.up.railway.app';
+const DEFAULT_MINI_APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
+  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+  : 'http://localhost:3000';
 
 export function miniAppUrl() {
   return String(process.env.WEBAPP_URL || DEFAULT_MINI_APP_URL).trim();
 }
 
 export const START_MESSAGE = [
-  '<b>Uztronix Mini App</b>',
+  '<b>Asterium Mini App</b>',
   'Xush kelibsiz! Ilovani ochish uchun quyidagi tugmani bosing.',
 ].join('\n');
 
@@ -1908,7 +1910,7 @@ export function startBot(token) {
       });
       if (!menu.ok) console.warn('Telegram menu button setup failed:', menu.description);
 
-      console.log('Uztronix CRM bot started');
+      console.log('Asterium CRM bot started');
       await poll();
     } catch (error) {
       console.error('Telegram bot startup failed:', error.message);

@@ -16,11 +16,11 @@ test('browser admin path defaults to secret path and sanitizes env overrides', (
   const previous = process.env.BROWSER_ADMIN_PATH;
   try {
     delete process.env.BROWSER_ADMIN_PATH;
-    assert.equal(getBrowserAdminPath(), '/ops-uztronix-x7m2');
+    assert.equal(getBrowserAdminPath(), '/ops-asterium-x7m2');
     process.env.BROWSER_ADMIN_PATH = '/crm-secret-desk';
     assert.equal(getBrowserAdminPath(), '/crm-secret-desk');
     process.env.BROWSER_ADMIN_PATH = 'no-slash';
-    assert.equal(getBrowserAdminPath(), '/ops-uztronix-x7m2');
+    assert.equal(getBrowserAdminPath(), '/ops-asterium-x7m2');
   } finally {
     if (previous === undefined) delete process.env.BROWSER_ADMIN_PATH;
     else process.env.BROWSER_ADMIN_PATH = previous;
@@ -39,7 +39,7 @@ test('browser session tokens are signed and expire', () => {
 });
 
 test('browser login accepts only admins with panel secret', () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-browser-auth-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-browser-auth-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
   try {

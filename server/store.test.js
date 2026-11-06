@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 test('updateEmployeeFields validates all values before writing', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-store-test-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-store-test-'));
   process.env.DATA_DIR = dataDir;
   const store = await import('./store.js');
 

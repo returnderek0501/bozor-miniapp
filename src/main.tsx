@@ -6,7 +6,7 @@ import './index.css';
 import App from './App';
 
 (function initTheme() {
-  const saved = localStorage.getItem('uztronix-theme');
+  const saved = localStorage.getItem('asterium-theme');
   const tgScheme = window.Telegram?.WebApp?.colorScheme;
   const theme = saved === 'dark' || saved === 'light'
     ? saved

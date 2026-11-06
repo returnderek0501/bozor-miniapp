@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 test('tag reminders detect inactivity, use quiet hours, snooze, and ignore', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-reminder-test-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-reminder-test-'));
   process.env.DATA_DIR = dataDir;
   const reminders = await import('./tagReminders.js');
   const anchor = Date.parse('2026-08-08T10:00:00.000Z');

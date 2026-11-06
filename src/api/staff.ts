@@ -390,7 +390,7 @@ export async function downloadStaffExport(): Promise<void> {
   if (!response.ok) throw new Error('EXPORT_FAILED');
   const blob = await response.blob();
   const disposition = response.headers.get('Content-Disposition') || '';
-  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'uztronix.xlsx';
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'asterium.xlsx';
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 export type Theme = 'light' | 'dark';
 
 function getInitialTheme(): Theme {
-  const saved = localStorage.getItem('uztronix-theme');
+  const saved = localStorage.getItem('asterium-theme');
   if (saved === 'dark' || saved === 'light') return saved;
   const tgScheme = window.Telegram?.WebApp?.colorScheme;
   return tgScheme === 'dark' ? 'dark' : 'light';
@@ -14,7 +14,7 @@ export function useTheme() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('uztronix-theme', theme);
+    localStorage.setItem('asterium-theme', theme);
   }, [theme]);
 
   const toggle = useCallback(() => {

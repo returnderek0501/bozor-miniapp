@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { writeJson, readJson } from './dataPath.js';
 
 test('writeJson uses atomic replace and keeps a backup', () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-datapath-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-datapath-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
   const file = join(dataDir, 'sample.json');
@@ -26,7 +26,7 @@ test('writeJson uses atomic replace and keeps a backup', () => {
 });
 
 test('readJson falls back to .bak when primary JSON is corrupt', () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-datapath-bak-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-datapath-bak-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
   const file = join(dataDir, 'broken.json');

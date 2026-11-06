@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import express from 'express';
 
 test('staff tag routes support approved clients that do not have a phone yet', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-routes-test-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-routes-test-'));
   const previousDataDir = process.env.DATA_DIR;
   const previousDemoAuth = process.env.ALLOW_DEMO_AUTH;
   const previousAdminIds = process.env.ADMIN_IDS;

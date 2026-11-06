@@ -5,7 +5,7 @@ import {
 } from './panelAccess.js';
 import { isAdmin } from './admins.js';
 
-export const DEFAULT_BROWSER_ADMIN_PATH = '/ops-uztronix-x7m2';
+export const DEFAULT_BROWSER_ADMIN_PATH = '/ops-asterium-x7m2';
 export const BROWSER_COOKIE_NAME = 'uz_browser_staff';
 const BROWSER_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
@@ -25,7 +25,7 @@ function sessionSecret() {
   return String(
     process.env.BROWSER_SESSION_SECRET
     || process.env.BOT_TOKEN
-    || 'uztronix-browser-staff-fallback',
+    || 'asterium-browser-staff-fallback',
   );
 }
 

@@ -19,7 +19,7 @@ export function Logo({ variant = 'full', className = '' }: Props) {
   return (
     <img
       src={src}
-      alt="Uztronix"
+      alt="Asterium"
       className={`logo logo--${variant} ${className}`.trim()}
       draggable={false}
     />

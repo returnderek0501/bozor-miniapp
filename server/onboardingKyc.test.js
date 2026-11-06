@@ -11,7 +11,7 @@ const documents = {
 };
 
 test('onboarding KYC must be approved before it can be linked to a phone', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-test-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-onboarding-test-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
 
@@ -56,7 +56,7 @@ test('onboarding KYC must be approved before it can be linked to a phone', async
 });
 
 test('approved onboarding KYC can be assigned a phone from staff panel', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-assign-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-onboarding-assign-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
 
@@ -130,7 +130,7 @@ test('approved onboarding KYC can be assigned a phone from staff panel', async (
 });
 
 test('onboarding KYC review is idempotent and clears stale phone links on resubmit', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-idempotent-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-onboarding-idempotent-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
 
@@ -178,7 +178,7 @@ test('onboarding KYC review is idempotent and clears stale phone links on resubm
 });
 
 test('reconcile does not resurrect rejected onboarding KYC from attachments', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-reject-keep-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-onboarding-reject-keep-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
   const folder = join(dataDir, 'attachments', 'tg_777001');
@@ -235,7 +235,7 @@ test('reconcile does not resurrect rejected onboarding KYC from attachments', as
 });
 
 test('onboarding KYC recovers pending records from attachment folders', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'uztronix-onboarding-recover-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asterium-onboarding-recover-'));
   const previous = process.env.DATA_DIR;
   process.env.DATA_DIR = dataDir;
   const folder = join(dataDir, 'attachments', 'tg_555001');

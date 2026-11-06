@@ -73,7 +73,7 @@ export function createApiRouter(botToken) {
     }
     res.json({
       ok: true,
-      service: 'uztronix',
+      service: 'asterium',
       bot,
       dataDir: getDataDir(),
       onboardingKyc: onboarding,
