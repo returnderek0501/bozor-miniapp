@@ -2,7 +2,7 @@ import { join } from 'path';
 import { writeFileSync } from 'fs';
 import XLSX from 'xlsx';
 import { DATA_DIR } from './dataPath.js';
-import { listEmployees } from './store.js';
+import { listEmployees, listSessionsByPhone } from './store.js';
 import {
   HEADERS_MAIN,
   HEADERS_TAG_HISTORY,
@@ -22,6 +22,7 @@ const EXPORT_FILE = join(DATA_DIR, 'uztronix_export.xlsx');
 
 export function buildWorkbookData() {
   const employees = listEmployees();
+  const sessions = listSessionsByPhone();
   const summaryRows = ['hour', 'today', 'week', 'month', 'all'].flatMap(range => {
     const stats = staffStatsData(range, employees);
     return stats.operators.map(operator => [
@@ -40,7 +41,7 @@ export function buildWorkbookData() {
       headers: ['Период', 'Оператор', 'Всего лидов', 'Новых лидов', 'Тегов поставлено', 'Тегов снято', 'По тегам'],
       rows: summaryRows,
     },
-    { name: 'Все лиды', headers: HEADERS_MAIN, rows: rowsFromEmployees(employees) },
+    { name: 'Все лиды', headers: HEADERS_MAIN, rows: rowsFromEmployees(employees, sessions) },
     { name: 'История тегов', headers: HEADERS_TAG_HISTORY, rows: tagHistoryRows(employees) },
     { name: 'Фото', headers: HEADERS_PHOTOS, rows: photoRows(employees) },
     { name: 'KYC', headers: HEADERS_KYC, rows: kycRows(employees) },
@@ -50,7 +51,7 @@ export function buildWorkbookData() {
     sheets.push({
       name: sanitizeSheetName(operator),
       headers: HEADERS_MAIN,
-      rows: rowsFromEmployees(emps),
+      rows: rowsFromEmployees(emps, sessions),
     });
   }
 

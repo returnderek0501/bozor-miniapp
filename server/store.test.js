@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -121,4 +121,44 @@ test('updateEmployeeFields validates all values before writing', async () => {
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }
+});
+
+test('bulk reads preserve whitelist order, migrations and first matching Telegram session', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'uztronix-bulk-'));
+  const previousDir = process.env.DATA_DIR;
+  process.env.DATA_DIR = dir;
+  t.after(() => {
+    if (previousDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDir;
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const store = await import('./store.js');
+  const { staffClientSummary, staffClientSummaries } = await import('./staffDto.js');
+  const first = '+998901111111';
+  const second = '+998902222222';
+  const hidden = '+998903333333';
+  const file = name => join(dir, name + '.json');
+  const write = (name, value) => writeFileSync(file(name), JSON.stringify(value));
+  write('phones', { phones: [second, first] });
+  write('employees', {
+    [first]: { clientId: '8', phone: first, kycDocuments: { idCard: { path: 'legacy.jpg' } } },
+    [hidden]: { clientId: '9', phone: hidden },
+  });
+  write('client_counter', { next: 10 });
+  write('sessions', { 100: { phone: first }, 101: { phone: first, username: 'duplicate' } });
+
+  const employees = store.listEmployees();
+  assert.deepEqual(employees.map(e => e.phone), [second, first]);
+  assert.deepEqual(employees.map(e => e.clientId), ['10', '8']);
+  const saved = JSON.parse(readFileSync(file('employees'), 'utf8'));
+  assert.deepEqual(saved[first].kycDocuments.idCardFront, { path: 'legacy.jpg' });
+  assert.equal(saved[first].kycDocuments.idCard, undefined);
+  assert.equal(saved[hidden].clientId, '9');
+  assert.equal(store.findEmployeeByClientId('9'), null);
+  const summaries = staffClientSummaries(employees);
+  assert.deepEqual(summaries, employees.map(staffClientSummary));
+  assert.deepEqual(summaries.map(c => c.telegramId), [null, 100]);
+
+  write('sessions', { 101: { phone: first, username: 'current' } });
+  assert.equal(staffClientSummaries(employees)[1].telegramUsername, 'current');
 });

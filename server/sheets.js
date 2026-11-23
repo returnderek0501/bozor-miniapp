@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { listEmployees } from './store.js';
+import { listEmployees, listSessionsByPhone } from './store.js';
 import {
   HEADERS_MAIN,
   HEADERS_TAG_HISTORY,
@@ -72,8 +72,9 @@ export async function syncToGoogleSheets() {
   if (!sheets || !spreadsheetId) return { ok: false, reason: 'not_configured' };
 
   const employees = listEmployees();
+  const sessions = listSessionsByPhone();
 
-  await writeSheet(spreadsheetId, 'Все лиды', HEADERS_MAIN, rowsFromEmployees(employees));
+  await writeSheet(spreadsheetId, 'Все лиды', HEADERS_MAIN, rowsFromEmployees(employees, sessions));
   await writeSheet(spreadsheetId, 'История тегов', HEADERS_TAG_HISTORY, tagHistoryRows(employees));
   await writeSheet(spreadsheetId, 'Фото', HEADERS_PHOTOS, photoRows(employees));
   await writeSheet(spreadsheetId, 'KYC', HEADERS_KYC, kycRows(employees));
@@ -83,7 +84,7 @@ export async function syncToGoogleSheets() {
       spreadsheetId,
       sanitizeSheetName(operator),
       HEADERS_MAIN,
-      rowsFromEmployees(emps),
+      rowsFromEmployees(emps, sessions),
     );
   }
 

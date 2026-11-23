@@ -1,8 +1,16 @@
 import { isClientProfileComplete } from './clientFields.js';
-import { getSessionByPhone } from './store.js';
+import { getSessionByPhone, listSessionsByPhone, resolvePhoneKey } from './store.js';
 
 export function staffClientSummary(emp) {
-  const session = getSessionByPhone(emp.phone);
+  return clientSummary(emp, getSessionByPhone(emp.phone));
+}
+
+export function staffClientSummaries(employees) {
+  const sessions = listSessionsByPhone();
+  return employees.map(emp => clientSummary(emp, sessions.get(resolvePhoneKey(emp.phone))));
+}
+
+function clientSummary(emp, session) {
   const telegramDisplayName = [session?.firstName, session?.lastName].filter(Boolean).join(' ');
   return {
     clientId: String(emp.clientId || ''),

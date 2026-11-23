@@ -228,18 +228,33 @@ export function getTelegramIdByPhone(phone) {
   return getSessionByPhone(phone)?.telegramId || null;
 }
 
+function sessionWithProfile(telegramId, session) {
+  return {
+    ...session,
+    telegramId: Number(telegramId),
+    username: session.username || '',
+    firstName: session.firstName || '',
+    lastName: session.lastName || '',
+  };
+}
+
+// Keep the first session for each phone, just as the single-phone lookup does.
+export function listSessionsByPhone() {
+  const byPhone = new Map();
+  for (const [telegramId, session] of Object.entries(readAllSessions())) {
+    if (session && !byPhone.has(session.phone)) {
+      byPhone.set(session.phone, sessionWithProfile(telegramId, session));
+    }
+  }
+  return byPhone;
+}
+
 export function getSessionByPhone(phone) {
-  const normalized = normalizePhone(phone) || normalizePhoneForOperator(phone);
+  const normalized = resolvePhoneKey(phone);
   const sessions = readAllSessions();
   for (const [tid, s] of Object.entries(sessions)) {
     if (s?.phone === normalized) {
-      return {
-        ...s,
-        telegramId: Number(tid),
-        username: s.username || '',
-        firstName: s.firstName || '',
-        lastName: s.lastName || '',
-      };
+      return sessionWithProfile(tid, s);
     }
   }
   return null;
@@ -289,25 +304,35 @@ function writeEmployees(all) {
   triggerSync();
 }
 
-export function getEmployee(rawPhone) {
-  const phone = normalizePhone(rawPhone) || normalizePhoneForOperator(rawPhone);
-  if (!phone) return null;
+function readEmployeesForPhones(phones) {
+  if (!phones.length) return [];
   const all = readEmployees();
-  if (!all[phone]) {
-    all[phone] = defaultEmployee(phone);
-    writeEmployees(all);
-    return all[phone];
-  }
-  const migrated = migrateEmployee({ ...all[phone] });
-  if (JSON.stringify(migrated) !== JSON.stringify(all[phone])) {
-    all[phone] = migrated;
-    writeJson(employeesFile(), all);
-  }
-  return migrated;
+  let changed = false;
+  let created = false;
+  const employees = phones.map(rawPhone => {
+    const phone = resolvePhoneKey(rawPhone);
+    if (!phone) return null;
+    if (!all[phone]) {
+      all[phone] = defaultEmployee(phone);
+      created = true;
+    }
+    const employee = all[phone];
+    const before = JSON.stringify(employee);
+    migrateEmployee(employee);
+    if (!changed && JSON.stringify(employee) !== before) changed = true;
+    return employee;
+  });
+  if (created) writeEmployees(all);
+  else if (changed) writeJson(employeesFile(), all);
+  return employees;
+}
+
+export function getEmployee(rawPhone) {
+  return readEmployeesForPhones([rawPhone])[0];
 }
 
 export function listEmployees() {
-  return listPhones().map(p => getEmployee(p));
+  return readEmployeesForPhones(listPhones());
 }
 
 export function listEmployeesForUser(telegramId, deskOperatorName = '') {

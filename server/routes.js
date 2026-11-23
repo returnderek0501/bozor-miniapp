@@ -32,7 +32,7 @@ import {
   getBrowserAdminPath, loginBrowserAdmin, logoutBrowserAdmin, readBrowserSession,
   browserSessionCookie, clearBrowserSessionCookie, BROWSER_COOKIE_NAME,
 } from './browserAuth.js';
-import { staffClientSummary, staffClientDetail, staffOnboardingClientSummary } from './staffDto.js';
+import { staffClientSummary, staffClientSummaries, staffClientDetail, staffOnboardingClientSummary } from './staffDto.js';
 import {
   listTagsForUser, addTag, removeTag, slugify, GLOBAL_TAG_COUNT,
 } from './tags.js';
@@ -330,7 +330,7 @@ export function createApiRouter(botToken) {
     const employees = !staff.isAdmin && !staff.deskName
       ? []
       : listEmployeesForUser(staff.tgUser.id, staff.deskName);
-    const realClients = employees.map(staffClientSummary);
+    const realClients = staffClientSummaries(employees);
     const linkedTelegramIds = new Set(
       realClients.map(client => Number(client.telegramId)).filter(Boolean),
     );
@@ -628,7 +628,7 @@ export function createApiRouter(botToken) {
       ? []
       : listEmployeesForUser(staff.tgUser.id, staff.deskName);
     return res.json({
-      clients: employees.filter(employee => isCreatedToday(employee.createdAt)).map(staffClientSummary),
+      clients: staffClientSummaries(employees.filter(employee => isCreatedToday(employee.createdAt))),
     });
   });
 

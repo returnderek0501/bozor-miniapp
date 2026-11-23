@@ -1,6 +1,6 @@
 import { formatTagTime } from './tags.js';
 import { kycStatusLabel } from './kyc.js';
-import { getSessionByPhone } from './store.js';
+import { getSessionByPhone, listSessionsByPhone, resolvePhoneKey } from './store.js';
 
 export const HEADERS_MAIN = [
   'ID клиента',
@@ -77,7 +77,10 @@ function formatActiveTags(emp) {
 }
 
 export function rowFromEmployee(emp) {
-  const session = getSessionByPhone(emp.phone);
+  return employeeRow(emp, getSessionByPhone(emp.phone));
+}
+
+function employeeRow(emp, session) {
   const telegramName = [session?.firstName, session?.lastName].filter(Boolean).join(' ');
   return [
     emp.clientId || '',
@@ -109,8 +112,8 @@ export function rowFromEmployee(emp) {
   ];
 }
 
-export function rowsFromEmployees(employees) {
-  return employees.map(rowFromEmployee);
+export function rowsFromEmployees(employees, sessions = listSessionsByPhone()) {
+  return employees.map(emp => employeeRow(emp, sessions.get(resolvePhoneKey(emp.phone))));
 }
 
 export function tagHistoryRows(employees) {

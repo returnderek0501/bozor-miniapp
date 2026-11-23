@@ -22,12 +22,12 @@ function loadData() {
 }
 
 function mutate(updater) {
-  return updateJsonSync(filePath(), EMPTY, (current) => {
+  return updateJsonSync(filePath(), { records: {}, updatedAt: null }, (current) => {
     const data = (!current?.records || typeof current.records !== 'object'
       || Array.isArray(current.records))
       ? { records: {}, updatedAt: null }
       : current;
-    updater(data);
+    if (updater(data) === false) return undefined;
     data.updatedAt = new Date().toISOString();
     return data;
   });
@@ -90,7 +90,7 @@ export function reconcileOnboardingFromAttachments() {
   if (!existsSync(attachmentsRoot)) return { recovered: 0, pending: listPendingOnboardingKyc({ reconcile: false }).length };
 
   let recovered = 0;
-  mutate((data) => {
+  const snapshot = mutate((data) => {
     const folders = readdirSync(attachmentsRoot).filter(name => /^tg_\d+$/.test(name));
     for (const folder of folders) {
       const telegramId = Number(folder.slice(3));
@@ -143,9 +143,11 @@ export function reconcileOnboardingFromAttachments() {
       };
       recovered += 1;
     }
+    return recovered > 0;
   });
 
-  return { recovered, pending: listPendingOnboardingKyc({ reconcile: false }).length };
+  const pending = Object.values(snapshot?.records || {}).filter(record => record.kycStatus === 'pending').length;
+  return { recovered, pending };
 }
 
 export function getOnboardingKyc(telegramId) {
